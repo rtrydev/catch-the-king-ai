@@ -34,3 +34,4 @@ Cards and their values:
 There are two score thresholds: 400 points or more - silver, 550 points or more - gold.
 When the hint fields are revealed, they don't stay like this - of course a cautious player can note which fields were revealed.
 The hint disappearing creates a possibility to pinpoint the locations of [5] cards because from one angle the hint appears and from another it doesn't - thus by elimination it is possible to know where the 5 is.
+The cards that are revealed during a player action and not captured, are also re-hidden, a cautious player can track what was revealed, and later capture these cards with stronger card in hand.

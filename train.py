@@ -6,9 +6,10 @@ import random
 from collections import deque
 import math
 
+# Import the new constants and class from the updated game.py
 from game import INPUT_SIZE, OUTPUT_SIZE, GameState, SCORE_GOLD, SCORE_SILVER
 
-# --- Config ---
+# --- Config (Unchanged) ---
 BATCH_SIZE = 128
 GAMMA = 0.99
 EPS_START = 1.0
@@ -27,14 +28,17 @@ class CNNDuelingDQN(nn.Module):
     def __init__(self, input_dim, output_dim):
         super(CNNDuelingDQN, self).__init__()
 
-        # Input is 443 floats.
-        # Part 1: Grid -> 25 cells * 17 features = 425
-        # Part 2: Scalars -> 18
+        # --- ADJUSTMENT START ---
+        # The input vector is now 132 floats.
+        # Structure: 5x5 Grid x 5 Channels + 7 Scalars
 
-        self.grid_features = 17
-        self.grid_total_size = 25 * self.grid_features # 425
+        self.grid_features = 5  # Changed from 17
+        self.grid_total_size = 25 * self.grid_features # 125
+        self.scalar_input_size = 7 # Changed from 18
+        # --- ADJUSTMENT END ---
 
         # Spatial Processing (CNN)
+        # Input channels: 5
         self.conv_layer = nn.Sequential(
             nn.Conv2d(self.grid_features, 64, kernel_size=3, padding=1),
             nn.ReLU(),
@@ -43,11 +47,11 @@ class CNNDuelingDQN(nn.Module):
             nn.Flatten()
         )
 
-        # 128 channels * 5 * 5 grid = 3200
+        # 128 channels * 5 * 5 grid = 3200 features from CNN
         cnn_out_size = 128 * 5 * 5
-        scalar_input_size = 18
 
-        combined_size = cnn_out_size + scalar_input_size
+        # Combine CNN output with the 7 scalar inputs
+        combined_size = cnn_out_size + self.scalar_input_size
 
         # Feature Merger
         self.fc_layer = nn.Sequential(
@@ -70,18 +74,22 @@ class CNNDuelingDQN(nn.Module):
         )
 
     def forward(self, x):
-        # x shape: [batch_size, 443]
+        # x shape: [batch_size, 132]
 
         # 1. Split Input
-        # First 425 are the grid
+        # First 125 are the grid, last 7 are scalars
         board_part = x[:, :self.grid_total_size]
         scalar_part = x[:, self.grid_total_size:]
 
         # 2. Reshape for CNN [Batch, Channels, Height, Width]
+        # Reshapes (Batch, 25, 5) -> (Batch, 5, 5, 5) -> (Batch, 5, 5, 5)
         batch_size = x.size(0)
+
+        # View as (Batch, 5 rows, 5 cols, 5 channels)
+        # Permute to (Batch, 5 channels, 5 rows, 5 cols) for PyTorch Conv2d
         board_reshaped = board_part.view(batch_size, 5, 5, self.grid_features).permute(0, 3, 1, 2)
 
-        # 3. Process
+        # 3. Process CNN
         cnn_out = self.conv_layer(board_reshaped)
 
         # 4. Concatenate with scalars
@@ -193,7 +201,7 @@ if __name__ == "__main__":
                     # Select action with Policy Net
                     policy_next_q = policy_net(b_next)
 
-                    # Apply mask to selection (very important)
+                    # Apply mask to selection
                     b_mask_t = torch.tensor(np.array(batch_next_mask), dtype=torch.bool).to(device)
                     policy_next_q[~b_mask_t] = -float('inf')
 
