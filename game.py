@@ -8,8 +8,8 @@ CARD_1, CARD_2, CARD_3, CARD_4, CARD_5, CARD_K = 1, 2, 3, 4, 5, 6
 POINTS = {1: 10, 2: 20, 3: 30, 4: 40, 5: 50, 6: 100}
 
 # Optimized Input:
-# 5x5 Grid x 5 Channels
-INPUT_SIZE = 132
+# 5x5 Grid x 6 Channels (added definitely_not_5 channel)
+INPUT_SIZE = 157  # 5*5*6 + 7 = 150 + 7 = 157
 OUTPUT_SIZE = 25
 
 class GameState:
@@ -46,6 +46,120 @@ class GameState:
                 neighbors.append((nr, nc))
         return neighbors
 
+    def _compute_triangulation(self):
+        """
+        Advanced constraint logic to determine which cells are DEFINITELY NOT 5s
+        and which cells are likely to contain 5s based on hint triangulation.
+
+        Logic:
+        1. When a card is revealed and NO 5 is among its neighbors, ALL neighbors
+           are marked as definitely_not_5.
+        2. When a card is revealed and a 5 IS among its neighbors (hint appeared),
+           that cell becomes a "hint source" - the 5 must be in one of its
+           unrevealed neighbors that aren't already ruled out.
+        3. By intersecting constraints from multiple hint sources, we can narrow
+           down the possible 5 locations.
+        4. If a potential 5 location is ruled out by being a neighbor of a
+           no-hint source, remove it from consideration.
+        """
+
+        # Track which cells are DEFINITELY NOT 5s
+        definitely_not_5 = np.zeros((5, 5), dtype=bool)
+
+        # Track hint sources and no-hint sources
+        hint_sources = []      # Cells where hint appeared (5 nearby)
+        no_hint_sources = []   # Cells where no hint appeared (no 5 nearby)
+
+        # --- Pass 1: Identify hint sources and no-hint sources ---
+        for r in range(5):
+            for c in range(5):
+                # Only consider cells we've seen (revealed or known)
+                if self.grid_revealed[r][c] or self.grid_known[r][c]:
+                    neighbors = self._get_neighbors(r, c)
+                    found_5_nearby = False
+
+                    for nr, nc in neighbors:
+                        if self.grid_values[nr][nc] == CARD_5:
+                            found_5_nearby = True
+                            break
+
+                    if found_5_nearby:
+                        hint_sources.append((r, c))
+                    else:
+                        no_hint_sources.append((r, c))
+
+        # --- Pass 2: Mark cells that are DEFINITELY NOT 5s ---
+
+        # Rule 1: Any neighbor of a no-hint source cannot be a 5
+        for r, c in no_hint_sources:
+            neighbors = self._get_neighbors(r, c)
+            for nr, nc in neighbors:
+                definitely_not_5[nr][nc] = True
+
+        # Rule 2: Any revealed/known card that we've seen and isn't a 5
+        for r in range(5):
+            for c in range(5):
+                if self.grid_revealed[r][c] or self.grid_known[r][c]:
+                    if self.grid_values[r][c] != CARD_5:
+                        definitely_not_5[r][c] = True
+                    # Note: if it IS a 5 and known, we leave it as possibly 5
+                    # (it's a known 5, which is tracked separately)
+
+        # --- Pass 3: Compute constrained 5 locations from hint sources ---
+        # For each hint source, identify which unrevealed neighbors could contain the 5
+
+        # possible_5_cells_per_hint[i] = set of (r,c) that could contain the 5
+        # that triggered hint source i
+        constrained_5_regions = []
+
+        for hr, hc in hint_sources:
+            neighbors = self._get_neighbors(hr, hc)
+            candidate_cells = set()
+
+            for nr, nc in neighbors:
+                # The 5 must be unrevealed (or known as 5)
+                if not self.grid_revealed[nr][nc]:
+                    if self.grid_known[nr][nc]:
+                        # Known but not revealed - check if it's actually a 5
+                        if self.grid_values[nr][nc] == CARD_5:
+                            candidate_cells.add((nr, nc))
+                        # If known and not 5, it can't be the source of this hint
+                    else:
+                        # Unknown cell - could be 5 if not ruled out
+                        if not definitely_not_5[nr][nc]:
+                            candidate_cells.add((nr, nc))
+
+            if candidate_cells:
+                constrained_5_regions.append(candidate_cells)
+
+        # --- Pass 4: Compute high-probability 5 locations ---
+        # Cells that appear in multiple constraint regions are more likely to be 5s
+
+        high_prob_5 = np.zeros((5, 5), dtype=np.float32)
+
+        if constrained_5_regions:
+            # Count how many constraint regions each cell appears in
+            appearance_count = {}
+            for region in constrained_5_regions:
+                for cell in region:
+                    appearance_count[cell] = appearance_count.get(cell, 0) + 1
+
+            # Cells appearing in more regions are more likely to be 5s
+            max_appearances = max(appearance_count.values()) if appearance_count else 1
+
+            for (r, c), count in appearance_count.items():
+                # Normalize: cells in all constraint regions get highest probability
+                high_prob_5[r][c] = count / max_appearances
+
+            # Special case: if a constraint region has only ONE candidate,
+            # that cell is DEFINITELY a 5
+            for region in constrained_5_regions:
+                if len(region) == 1:
+                    cell = list(region)[0]
+                    high_prob_5[cell[0]][cell[1]] = 1.0
+
+        return definitely_not_5, high_prob_5, hint_sources, constrained_5_regions
+
     def get_observation_vector(self):
         # --- 1. Calculate Remaining Deck (Card Counting) ---
         current_board_counts = self.full_deck_counts.copy()
@@ -61,49 +175,59 @@ class GameState:
 
         total_unknown = len(unknown_indices)
 
-        # --- 2. Advanced Constraint Logic (Minesweeper Solver) ---
+        # --- 2. Advanced Constraint Logic (Triangulation) ---
+        definitely_not_5, high_prob_5, hint_sources, constrained_regions = self._compute_triangulation()
+
+        # --- 3. Build refined probability map for 5s ---
         prob_5_map = np.zeros((5, 5), dtype=np.float32)
         possible_5s = current_board_counts[CARD_5]
 
-        safe_mask = np.zeros((5, 5), dtype=bool)     # Definitely NOT 5
-        active_hint_map = np.zeros((5, 5), dtype=np.float32)
+        # Count cells that could potentially have a 5
+        potential_5_cells = [
+            (r, c) for r, c in unknown_indices
+            if not definitely_not_5[r][c]
+        ]
+        num_potential = len(potential_5_cells)
 
-        # Pass 1: Deduce hints from revealed cards
-        for r in range(5):
-            for c in range(5):
-                if self.grid_revealed[r][c] or self.grid_known[r][c]:
-                    neighbors = self._get_neighbors(r, c)
-                    found_5_nearby = False
-                    for nr, nc in neighbors:
-                        if self.grid_values[nr][nc] == CARD_5:
-                            found_5_nearby = True
-                            break
-
-                    if found_5_nearby:
-                        active_hint_map[r][c] = 1.0
-                    else:
-                        for nr, nc in neighbors:
-                            safe_mask[nr][nc] = True
-
-        # Pass 2: Assign probabilities
-        if total_unknown > 0:
-            base_prob_5 = possible_5s / total_unknown
+        # Base probability for unknown cells that aren't ruled out
+        if num_potential > 0 and possible_5s > 0:
+            base_prob_5 = min(1.0, possible_5s / num_potential)
         else:
             base_prob_5 = 0.0
 
-        for r, c in unknown_indices:
-            if safe_mask[r][c]:
-                prob_5_map[r][c] = 0.0
-            else:
-                prob_5_map[r][c] = base_prob_5
-                # Heuristic boost if neighbor generates hint
-                neighbors = self._get_neighbors(r, c)
-                for nr, nc in neighbors:
-                    if active_hint_map[nr][nc] == 1.0:
-                        prob_5_map[r][c] = max(prob_5_map[r][c], 0.5)
+        for r in range(5):
+            for c in range(5):
+                if self.grid_revealed[r][c]:
+                    # Revealed and captured - no danger
+                    prob_5_map[r][c] = 0.0
+                elif self.grid_known[r][c]:
+                    # Known but not revealed (re-hidden)
+                    val = self.grid_values[r][c]
+                    prob_5_map[r][c] = 1.0 if val == CARD_5 else 0.0
+                else:
+                    # Unknown cell
+                    if definitely_not_5[r][c]:
+                        prob_5_map[r][c] = 0.0
+                    elif high_prob_5[r][c] > 0:
+                        # Use triangulation-derived probability
+                        prob_5_map[r][c] = max(base_prob_5, high_prob_5[r][c])
+                    else:
+                        prob_5_map[r][c] = base_prob_5
 
-        # --- 3. Build Channels ---
-        grid_obs = np.zeros((5, 5, 5), dtype=np.float32)
+        # --- 4. Build active hint map ---
+        active_hint_map = np.zeros((5, 5), dtype=np.float32)
+        for r, c in hint_sources:
+            active_hint_map[r][c] = 1.0
+
+        # --- 5. Build Channels ---
+        # Channel 0: Board State
+        # Channel 1: Win Probability
+        # Channel 2: Danger (prob of 5)
+        # Channel 3: King Probability
+        # Channel 4: Hint Source
+        # Channel 5: Definitely NOT 5 (new channel)
+
+        grid_obs = np.zeros((6, 5, 5), dtype=np.float32)
         current_hand_card = self.hand[0] if self.hand else 0
 
         # Precompute win/loss logic for current hand
@@ -120,36 +244,63 @@ class GameState:
             for c in range(5):
                 # Channel 0: Board State
                 if self.grid_revealed[r][c]:
-                    grid_obs[0][r][c] = 0.0
+                    grid_obs[0][r][c] = 0.0  # Captured/revealed
                 elif self.grid_known[r][c]:
-                    grid_obs[0][r][c] = self.grid_values[r][c] / 6.0
+                    grid_obs[0][r][c] = self.grid_values[r][c] / 6.0  # Known value
                 else:
-                    grid_obs[0][r][c] = -1.0
+                    grid_obs[0][r][c] = -1.0  # Unknown
 
-                # If unknown
+                # Channel 5: Definitely NOT 5 (safe from 5-capture)
+                grid_obs[5][r][c] = 1.0 if definitely_not_5[r][c] else 0.0
+
+                # For unknown cells
                 if not (self.grid_revealed[r][c] or self.grid_known[r][c]):
-                    grid_obs[2][r][c] = prob_5_map[r][c] # Ch 2: Danger
+                    # Channel 2: Danger (probability of 5)
+                    grid_obs[2][r][c] = prob_5_map[r][c]
 
+                    # Channel 3: King probability
                     if current_board_counts[CARD_K] > 0:
-                        grid_obs[3][r][c] = 1.0 / total_unknown # Ch 3: King
+                        # King could be in any unknown cell not ruled out
+                        # (we don't have king-specific triangulation, so uniform)
+                        grid_obs[3][r][c] = 1.0 / total_unknown
+                    else:
+                        grid_obs[3][r][c] = 0.0
 
-                    grid_obs[1][r][c] = prob_win_base # Ch 1: Win Prob
+                    # Channel 1: Win Probability
+                    if definitely_not_5[r][c]:
+                        # We know it's not a 5, so adjust win probability
+                        # Remove 5s from consideration for this cell
+                        adjusted_wins = wins_in_deck
+                        adjusted_total = total_unknown
+                        if current_hand_card != CARD_K and current_hand_card < CARD_5:
+                            # 5s would have been wins, but this cell isn't a 5
+                            # Slightly increase win prob since we ruled out a card type
+                            pass  # Keep base probability for simplicity
+                        grid_obs[1][r][c] = prob_win_base
+                    else:
+                        grid_obs[1][r][c] = prob_win_base
 
-                # If Known (but hidden)
+                # For known (but hidden) cells
                 elif self.grid_known[r][c] and not self.grid_revealed[r][c]:
                     val = self.grid_values[r][c]
+
+                    # Channel 2: Danger
                     grid_obs[2][r][c] = 1.0 if val == CARD_5 else 0.0
+
+                    # Channel 3: King
                     grid_obs[3][r][c] = 1.0 if val == CARD_K else 0.0
 
+                    # Channel 1: Win Probability (known outcome)
                     if current_hand_card == CARD_K:
-                         grid_obs[1][r][c] = 1.0 if val == CARD_K else 0.0
+                        grid_obs[1][r][c] = 1.0 if val == CARD_K else 0.0
                     else:
-                         grid_obs[1][r][c] = 1.0 if val >= current_hand_card else 0.0
+                        grid_obs[1][r][c] = 1.0 if val >= current_hand_card else 0.0
 
                 # Channel 4: Hint Source
                 grid_obs[4][r][c] = active_hint_map[r][c]
 
-        flat_grid = grid_obs.flatten()
+        # --- 6. Build scalar features ---
+        flat_grid = grid_obs.flatten()  # 5*5*6 = 150
         hand_scalar = [current_hand_card / 6.0]
         deck_scalar = [current_board_counts[k]/25.0 for k in range(1, 7)]
 
@@ -175,7 +326,7 @@ class GameState:
             'hand_popped': False,
             're_hidden': False,
             'popped_card': player_card,
-            'show_hint': show_hint  # <--- ADD THIS
+            'show_hint': show_hint
         }
 
         # 1. Suicide Check (Known card that we LOSE to)
@@ -348,3 +499,55 @@ class GameState:
         reward = (self.score - prev_score) + step_reward
 
         return self.get_observation_vector(), reward, self.game_over
+
+
+# =============================================================================
+# Utility function to visualize triangulation (for debugging)
+# =============================================================================
+
+def debug_triangulation(game_state):
+    """
+    Debug function to visualize what the triangulation logic has determined.
+    """
+    definitely_not_5, high_prob_5, hint_sources, constrained_regions = game_state._compute_triangulation()
+
+    print("=== Triangulation Debug ===")
+    print(f"Actual 5 locations:")
+    for r in range(5):
+        for c in range(5):
+            if game_state.grid_values[r][c] == CARD_5:
+                print(f"  5 at ({r}, {c})")
+
+    print(f"\nHint sources (revealed cards with 5 nearby): {hint_sources}")
+    print(f"Number of constraint regions: {len(constrained_regions)}")
+
+    print("\nDefinitely NOT 5 map:")
+    for r in range(5):
+        row_str = ""
+        for c in range(5):
+            if game_state.grid_revealed[r][c]:
+                row_str += " R "
+            elif game_state.grid_known[r][c]:
+                row_str += " K "
+            elif definitely_not_5[r][c]:
+                row_str += " X "  # Ruled out
+            else:
+                row_str += " ? "  # Could be 5
+        print(row_str)
+
+    print("\nHigh probability 5 map:")
+    for r in range(5):
+        row_str = ""
+        for c in range(5):
+            prob = high_prob_5[r][c]
+            if prob >= 0.99:
+                row_str += " ! "  # Definitely 5
+            elif prob > 0.5:
+                row_str += " H "  # High prob
+            elif prob > 0:
+                row_str += " M "  # Medium prob
+            else:
+                row_str += " . "  # Low/zero
+        print(row_str)
+
+    print("===========================")

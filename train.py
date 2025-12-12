@@ -14,8 +14,8 @@ from game import INPUT_SIZE, OUTPUT_SIZE, GameState, SCORE_GOLD, SCORE_SILVER
 # =============================================================================
 
 # Training duration
-NUM_EPISODES = 20000          # Increased from 20000
-EVAL_INTERVAL = 100           # How often to print stats
+NUM_EPISODES = 100000          # Increased from 20000
+EVAL_INTERVAL = 1000           # How often to print stats
 
 # Replay buffer
 MEMORY_SIZE = 150000          # Slightly larger buffer
@@ -148,16 +148,23 @@ class UniformReplayBuffer:
 
 
 # =============================================================================
-# NETWORK ARCHITECTURE (unchanged from original)
+# NETWORK ARCHITECTURE (updated for 6 channels)
 # =============================================================================
 
 class CNNDuelingDQN(nn.Module):
     def __init__(self, input_dim, output_dim):
         super(CNNDuelingDQN, self).__init__()
 
-        self.grid_features = 5
-        self.grid_total_size = 25 * self.grid_features  # 125
-        self.scalar_input_size = 7
+        # Updated for 6 channels:
+        # Ch0: Board State
+        # Ch1: Win Probability
+        # Ch2: Danger (prob of 5)
+        # Ch3: King Probability
+        # Ch4: Hint Source
+        # Ch5: Definitely NOT 5 (new)
+        self.grid_features = 6  # Updated from 5 to 6
+        self.grid_total_size = 25 * self.grid_features  # 150
+        self.scalar_input_size = 7  # hand card + 6 deck counts
 
         # Spatial Processing (CNN)
         self.conv_layer = nn.Sequential(
@@ -380,6 +387,7 @@ def train():
     print(f"Prioritized Replay: {USE_PER}")
     print(f"Soft Updates: {USE_SOFT_UPDATE} (tau={TAU})")
     print(f"LR Scheduler: {USE_LR_SCHEDULER}")
+    print(f"Input Size: {INPUT_SIZE} (6 channels + 7 scalars)")
     print("=" * 60)
 
     # Initialize networks
@@ -457,8 +465,8 @@ def train():
         if episode_loss:
             losses.append(np.mean(episode_loss))
 
-        # Learning rate scheduler step
-        if scheduler is not None:
+        # Learning rate scheduler step - only after training has started
+        if scheduler is not None and len(memory) >= max(BATCH_SIZE, MIN_MEMORY):
             scheduler.step()
 
         # Logging
