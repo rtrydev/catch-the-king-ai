@@ -14,36 +14,38 @@ GAMMA = 0.99
 EPS_START = 1.0
 EPS_END = 0.01
 LR = 1e-4
-TARGET_UPDATE = 200
+TARGET_UPDATE = 400
 MEMORY_SIZE = 100000
-NUM_EPISODES = 10000
+NUM_EPISODES = 20000
 EPS_DECAY = 2 * NUM_EPISODES
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # --- Improved Architecture: CNN Dueling DQN ---
+
 class CNNDuelingDQN(nn.Module):
     def __init__(self, input_dim, output_dim):
         super(CNNDuelingDQN, self).__init__()
 
-        # Input is 243 floats.
-        # Part 1: Grid Image -> 25 cells * (8 card features + 1 highlight) = 225
-        # Part 2: Scalars -> Hand(6) + Counts(6) + Deck(6) = 18
+        # Input is 443 floats.
+        # Part 1: Grid -> 25 cells * 17 features = 425
+        # Part 2: Scalars -> 18
 
-        self.grid_features = 9 # 8 card states + 1 highlight
+        self.grid_features = 17
+        self.grid_total_size = 25 * self.grid_features # 425
 
         # Spatial Processing (CNN)
         self.conv_layer = nn.Sequential(
-            nn.Conv2d(self.grid_features, 32, kernel_size=3, padding=1),
+            nn.Conv2d(self.grid_features, 64, kernel_size=3, padding=1),
             nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size=3, padding=1),
+            nn.Conv2d(64, 128, kernel_size=3, padding=1),
             nn.ReLU(),
             nn.Flatten()
         )
 
-        # 64 channels * 5 * 5 grid = 1600
-        cnn_out_size = 1600
-        scalar_input_size = 18 # The remaining part of the input vector
+        # 128 channels * 5 * 5 grid = 3200
+        cnn_out_size = 128 * 5 * 5
+        scalar_input_size = 18
 
         combined_size = cnn_out_size + scalar_input_size
 
@@ -68,18 +70,16 @@ class CNNDuelingDQN(nn.Module):
         )
 
     def forward(self, x):
-        # x shape: [batch_size, 243]
+        # x shape: [batch_size, 443]
 
         # 1. Split Input
-        # First 225 are the grid (25 cells * 9 features)
-        board_part = x[:, :225]
-        scalar_part = x[:, 225:]
+        # First 425 are the grid
+        board_part = x[:, :self.grid_total_size]
+        scalar_part = x[:, self.grid_total_size:]
 
         # 2. Reshape for CNN [Batch, Channels, Height, Width]
-        # We need to reshape 225 -> (Batch, 5, 5, 9) then permute to (Batch, 9, 5, 5)
-        # Note: The data generation order in game.py is Row major, cell features inner.
         batch_size = x.size(0)
-        board_reshaped = board_part.view(batch_size, 5, 5, 9).permute(0, 3, 1, 2)
+        board_reshaped = board_part.view(batch_size, 5, 5, self.grid_features).permute(0, 3, 1, 2)
 
         # 3. Process
         cnn_out = self.conv_layer(board_reshaped)
