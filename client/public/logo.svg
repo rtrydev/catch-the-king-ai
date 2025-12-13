@@ -1,0 +1,63 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Card Shadow Filter -->
+    <filter id="cardShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="10"/>
+      <feOffset dx="0" dy="8" result="offsetblur"/>
+      <feComponentTransfer>
+        <feFuncA type="linear" slope="0.4"/>
+      </feComponentTransfer>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Main Icon Background (Rounded Square) -->
+  <rect x="0" y="0" width="512" height="512" rx="100" ry="100" fill="#2C3E50"/>
+
+  <!-- Background Grid -->
+  <g opacity="0.3">
+    <rect x="60" y="60" width="180" height="180" rx="20" fill="#34495E" stroke="#7F8C8D" stroke-width="4"/>
+    <rect x="272" y="60" width="180" height="180" rx="20" fill="#34495E" stroke="#7F8C8D" stroke-width="4"/>
+    <rect x="60" y="272" width="180" height="180" rx="20" fill="#34495E" stroke="#7F8C8D" stroke-width="4"/>
+    <rect x="272" y="272" width="180" height="180" rx="20" fill="#34495E" stroke="#7F8C8D" stroke-width="4"/>
+  </g>
+
+  <!-- The King Card (Revealed) -->
+  <g transform="translate(116, 86)" filter="url(#cardShadow)">
+    <!-- Card Body -->
+    <rect x="0" y="0" width="280" height="360" rx="25" ry="25" fill="#FFFFFF" stroke="#E0E0E0" stroke-width="2"/>
+
+    <!-- Inner Border for Style -->
+    <rect x="20" y="20" width="240" height="320" rx="15" ry="15" fill="none" stroke="#F1C40F" stroke-width="4" stroke-dasharray="10,10"/>
+
+    <!-- Corner K (Top Left) -->
+    <!-- Position: 35px from left, 65px baseline from top -->
+    <text x="35" y="65" font-family="Arial, sans-serif" font-weight="bold" font-size="40" fill="#C0392B" text-anchor="middle">K</text>
+
+    <!-- Corner K (Bottom Right - Inverted) -->
+    <!-- Position: Symmetric rotation around center of card (140, 180) -->
+    <!-- Target Coordinate: x = 280 - 35 = 245; y = 360 - 65 = 295 -->
+    <g transform="translate(245, 295) rotate(180)">
+       <!-- Removed dominant-baseline to ensure symmetry with top K -->
+       <text x="0" y="0" font-family="Arial, sans-serif" font-weight="bold" font-size="40" fill="#C0392B" text-anchor="middle">K</text>
+    </g>
+
+    <!-- The Crown Symbol -->
+    <!-- Solid Gold fill (No Gradients for ICO safety) -->
+    <path d="M 70 200 L 50 130 L 100 160 L 140 100 L 180 160 L 230 130 L 210 200 Z" fill="#FFD700" stroke="#D35400" stroke-width="3" stroke-linejoin="round"/>
+
+    <!-- Crown Highlight -->
+    <path d="M 140 100 L 100 160 L 70 200 L 210 200 L 180 160 Z" fill="#FDB931" opacity="0.5"/>
+
+    <!-- Crown Base -->
+    <rect x="70" y="200" width="140" height="20" rx="5" fill="#C0392B"/>
+
+    <!-- Jewels on Crown -->
+    <circle cx="50" cy="130" r="6" fill="#C0392B"/>
+    <circle cx="140" cy="100" r="8" fill="#C0392B"/>
+    <circle cx="230" cy="130" r="6" fill="#C0392B"/>
+  </g>
+</svg>
