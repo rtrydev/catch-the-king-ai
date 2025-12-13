@@ -45,6 +45,16 @@ export const GameBoard: React.FC<Props> = ({ gameState, loading, gameMode, visua
           const isValidMove = gameState.valid_moves.some(([r, c]) => r === rIndex && c === cIndex);
           const isDisabled = gameState.game_over || (gameMode === 'manual' ? true : !isValidMove);
 
+          // --- Bonus Logic Update ---
+          const isMainDiag = rIndex === cIndex; // Top-Left to Bottom-Right
+          const isAntiDiag = rIndex + cIndex === 4; // Bottom-Left to Top-Right
+
+          const isBonusCell =
+            gameState.rows_completed[rIndex] ||
+            gameState.cols_completed[cIndex] ||
+            (isMainDiag && gameState.diag_main_completed) ||
+            (isAntiDiag && gameState.diag_anti_completed);
+
           return (
             <button
               key={`${rIndex}-${cIndex}`}
@@ -59,7 +69,8 @@ export const GameBoard: React.FC<Props> = ({ gameState, loading, gameMode, visua
                 isSelected && 'ring-2 ring-emerald-400 ring-offset-2 ring-offset-slate-900 z-20 scale-105 bg-slate-700 border-emerald-400',
                 isAiHint && !isVisible && !isSelected && 'animate-pulse ring-2 ring-cyan-400/80 ring-offset-2 ring-offset-slate-900 z-10 scale-105',
                 isDisabled && !isVisible && !gameState.game_over && !isSelected && 'opacity-30 cursor-not-allowed border-transparent',
-                (gameState.rows_completed[rIndex] || gameState.cols_completed[cIndex]) && isVisible && 'brightness-125 ring-2 ring-yellow-500/40'
+                // Updated highlight class application:
+                isBonusCell && isVisible && 'brightness-125 ring-2 ring-yellow-500/40'
               )}
             >
               {displayContent !== null ? (

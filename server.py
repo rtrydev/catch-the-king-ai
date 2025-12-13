@@ -77,6 +77,8 @@ class GameStateResponse(BaseModel):
     cols_completed: list[bool]
     valid_moves: list[list[int]]
     is_manual: bool
+    diag_main_completed: bool
+    diag_anti_completed: bool
 
 class HintResponse(BaseModel):
     recommended_move: list[int]
@@ -130,7 +132,9 @@ def get_game_state_response(game: GameState) -> GameStateResponse:
         rows_completed=game.rows_completed.copy(),
         cols_completed=game.cols_completed.copy(),
         valid_moves=valid_moves,
-        is_manual=game.manual_mode
+        is_manual=game.manual_mode,
+        diag_main_completed=game.diag1_completed,
+        diag_anti_completed=game.diag2_completed
     )
 
 @app.post("/game/new", response_model=NewGameResponse)

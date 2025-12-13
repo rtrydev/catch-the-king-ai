@@ -16,6 +16,10 @@ export class CatchTheKingEngine {
   public gameOver: boolean = false;
   public rowsCompleted: boolean[] = [];
   public colsCompleted: boolean[] = [];
+  // NEW: Diagonal completion tracking
+  public diagMainCompleted: boolean = false; // Top-Left to Bottom-Right
+  public diagAntiCompleted: boolean = false; // Bottom-Left to Top-Right
+
   public manualMode: boolean;
   public manualHints: Set<string> = new Set();
 
@@ -53,12 +57,15 @@ export class CatchTheKingEngine {
       ...Array(1).fill(4),
       ...Array(1).fill(5),
       ...Array(1).fill(6),
-    ]; // Already sorted by definition of the Python code list
+    ];
 
     this.score = 0;
     this.gameOver = false;
     this.rowsCompleted = Array(5).fill(false);
     this.colsCompleted = Array(5).fill(false);
+    // NEW: Reset diagonal states
+    this.diagMainCompleted = false;
+    this.diagAntiCompleted = false;
   }
 
   // --- Logic Helpers ---
@@ -483,6 +490,39 @@ export class CatchTheKingEngine {
         this.colsCompleted[c] = true;
       }
     }
+
+    // NEW: Check Main Diagonal (Top-Left to Bottom-Right)
+    // Only needs checking if the revealed cell is on this diagonal (r == c)
+    if (r === c && !this.diagMainCompleted) {
+      let allRevealed = true;
+      for (let i = 0; i < 5; i++) {
+        if (!this.gridRevealed[i][i]) {
+          allRevealed = false;
+          break;
+        }
+      }
+      if (allRevealed) {
+        bPts += 10;
+        this.diagMainCompleted = true;
+      }
+    }
+
+    // NEW: Check Anti Diagonal (Bottom-Left to Top-Right)
+    // Only needs checking if the revealed cell is on this diagonal (r + c == 4)
+    if (r + c === 4 && !this.diagAntiCompleted) {
+      let allRevealed = true;
+      for (let i = 0; i < 5; i++) {
+        if (!this.gridRevealed[i][4 - i]) {
+          allRevealed = false;
+          break;
+        }
+      }
+      if (allRevealed) {
+        bPts += 10;
+        this.diagAntiCompleted = true;
+      }
+    }
+
     this.score += bPts;
   }
 
@@ -591,7 +631,9 @@ export class CatchTheKingEngine {
       rows_completed: [...this.rowsCompleted],
       cols_completed: [...this.colsCompleted],
       valid_moves: validMoves,
-      is_manual: this.manualMode
+      is_manual: this.manualMode,
+      diag_main_completed: this.diagMainCompleted,
+      diag_anti_completed: this.diagAntiCompleted
     };
   }
 }

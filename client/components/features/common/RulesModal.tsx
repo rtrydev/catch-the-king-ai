@@ -96,7 +96,7 @@ export const RulesModal: React.FC<RulesModalProps> = ({ onClose }) => {
                     <strong className="text-white">The King:</strong> If you play <strong className="text-yellow-400">[K]</strong> and find the King, you get 100 pts and the game ends. If you reveal anything else with the King, the game ends immediately.
                   </li>
                   <li>
-                    <strong className="text-white">Row Bonus:</strong> Clearing a whole row or column gives <strong className="text-emerald-400">+10 points</strong>.
+                    <strong className="text-white">Row Bonus:</strong> Clearing a whole row, column or diagonal gives <strong className="text-emerald-400">+10 points</strong>.
                   </li>
                 </ul>
               </section>

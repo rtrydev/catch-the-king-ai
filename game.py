@@ -36,8 +36,13 @@ class GameState:
                      [CARD_4]*1 + [CARD_5]*1 + [CARD_K]*1)
         self.score = 0
         self.game_over = False
+
+        # --- TRACKING COMPLETED LINES ---
         self.rows_completed = [False] * 5
         self.cols_completed = [False] * 5
+        self.diag1_completed = False # Top-left to bottom-right
+        self.diag2_completed = False # Bottom-left to top-right
+
         return self.get_observation_vector()
 
     def _get_neighbors(self, r, c):
@@ -267,16 +272,8 @@ class GameState:
                 return info
 
         # 2. Capture by Hidden 5 Check
-        # In manual mode, we rely on the USER telling us if there was a hint
-        # when we play a 5. If I play a 5, and the user checks "Hint",
-        # it means there is a 5 adjacent.
         captured = False
         if player_card == CARD_5:
-            # If the user says there is a hint, it means a 5 is nearby.
-            # In standard rules, if you play a 5 and there is an UNREVEALED 5 neighbor, you die.
-            # In Manual mode, we assume the user reports the hint correctly.
-            # However, we must ensure we aren't being "captured" by a card effectively revealed
-            # (though the rules say capture happens if neighbor is NOT revealed).
             # Simplification for Manual Mode: If user says Hint, and I played 5 -> Captured.
             if has_hint:
                 captured = True
@@ -316,10 +313,23 @@ class GameState:
             # 4. Bonuses
             if self.grid_revealed[r][c] and not self.game_over:
                 b_pts = 0
+                # Row Bonus
                 if not self.rows_completed[r] and all(self.grid_revealed[r, :]):
                     b_pts += 10; self.rows_completed[r] = True
+                # Col Bonus
                 if not self.cols_completed[c] and all(self.grid_revealed[:, c]):
                     b_pts += 10; self.cols_completed[c] = True
+
+                # Diagonal 1 Bonus (Top-Left -> Bottom-Right)
+                if not self.diag1_completed and r == c:
+                    if all(self.grid_revealed[i][i] for i in range(5)):
+                        b_pts += 10; self.diag1_completed = True
+
+                # Diagonal 2 Bonus (Bottom-Left -> Top-Right)
+                if not self.diag2_completed and r + c == 4:
+                    if all(self.grid_revealed[i][4 - i] for i in range(5)):
+                        b_pts += 10; self.diag2_completed = True
+
                 self.score += b_pts
 
         if not self.hand: self.game_over = True
@@ -397,10 +407,23 @@ class GameState:
 
             if self.grid_revealed[r][c] and not self.game_over:
                 b_pts = 0
+                # Row Bonus
                 if not self.rows_completed[r] and all(self.grid_revealed[r, :]):
                     b_pts += 10; self.rows_completed[r] = True
+                # Col Bonus
                 if not self.cols_completed[c] and all(self.grid_revealed[:, c]):
                     b_pts += 10; self.cols_completed[c] = True
+
+                # Diagonal 1 Bonus (Top-Left -> Bottom-Right)
+                if not self.diag1_completed and r == c:
+                    if all(self.grid_revealed[i][i] for i in range(5)):
+                        b_pts += 10; self.diag1_completed = True
+
+                # Diagonal 2 Bonus (Bottom-Left -> Top-Right)
+                if not self.diag2_completed and r + c == 4:
+                    if all(self.grid_revealed[i][4 - i] for i in range(5)):
+                        b_pts += 10; self.diag2_completed = True
+
                 self.score += b_pts
 
         if not self.hand: self.game_over = True
