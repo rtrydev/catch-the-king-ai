@@ -1,5 +1,3 @@
-// src/types.ts
-
 export interface CellInfo {
   value: number | null;
   revealed: boolean;
@@ -14,8 +12,8 @@ export interface GameStateResponse {
   game_over: boolean;
   rows_completed: boolean[];
   cols_completed: boolean[];
-  valid_moves: number[][]; // [row, col]
-  is_manual: boolean
+  valid_moves: number[][];
+  is_manual: boolean;
 }
 
 export interface MoveResponse {
@@ -33,7 +31,10 @@ export interface HintResponse {
   all_moves_ranked: any[];
 }
 
-export interface NewGameResponse {
-  session_id: string;
-  message: string;
+export type GameMode = 'auto' | 'manual' | 'eval';
+
+export interface VisualHintState {
+  tempRevealed: { r: number; c: number; val: number } | null;
+  trapHintCells: number[][];
+  aiHintCell: { r: number; c: number } | null;
 }

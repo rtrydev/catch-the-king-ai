@@ -1,9 +1,8 @@
-const API_BASE = 'http://localhost:8000';
-
 import { GameStateResponse, MoveResponse, HintResponse } from '@/types';
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
 export const api = {
-  // Modified to accept manual mode flag
   createGame: async (manual: boolean = false) => {
     const res = await fetch(`${API_BASE}/game/new?manual=${manual}`, { method: 'POST' });
     return res.json() as Promise<{ session_id: string }>;
@@ -24,7 +23,6 @@ export const api = {
     return res.json() as Promise<MoveResponse>;
   },
 
-  // New function for manual mode
   makeManualMove: async (sessionId: string, row: number, col: number, actual_value: number, has_hint: boolean) => {
     const res = await fetch(`${API_BASE}/game/${sessionId}/manual-input`, {
       method: 'POST',
