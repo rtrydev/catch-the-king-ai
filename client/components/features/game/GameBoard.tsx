@@ -32,11 +32,16 @@ export const GameBoard: React.FC<Props> = ({ gameState, loading, gameMode, visua
           const isTrapHint = visuals.trapHintCells.some(([tr, tc]) => tr === rIndex && tc === cIndex);
           const isAiHint = visuals.aiHintCell?.r === rIndex && visuals.aiHintCell?.c === cIndex;
           const isSelected = selectedCell?.r === rIndex && selectedCell?.c === cIndex;
+
+          // Determine if the cell should be visually exposed
           const isVisible = cell.revealed || isTempRevealed || (gameState.game_over && cell.value !== null);
 
           let displayContent: React.ReactNode = null;
+
           if (isVisible) {
-            const val = cell.revealed || gameState.game_over ? cell.value : visuals.tempRevealed?.val;
+            // FIX: Use cell.value if it exists (even if cell.revealed is false, e.g., during a trap trigger),
+            // otherwise fallback to the tempRevealed value.
+            const val = cell.value ?? visuals.tempRevealed?.val;
             displayContent = val === 6 ? <Crown size={32} fill="currentColor" /> : val;
           } else if (gameState.game_over && cell.value === null) {
             displayContent = <span className="text-slate-700 text-2xl font-bold">?</span>;
@@ -69,7 +74,6 @@ export const GameBoard: React.FC<Props> = ({ gameState, loading, gameMode, visua
                 isSelected && 'ring-2 ring-emerald-400 ring-offset-2 ring-offset-slate-900 z-20 scale-105 bg-slate-700 border-emerald-400',
                 isAiHint && !isVisible && !isSelected && 'animate-pulse ring-2 ring-cyan-400/80 ring-offset-2 ring-offset-slate-900 z-10 scale-105',
                 isDisabled && !isVisible && !gameState.game_over && !isSelected && 'opacity-30 cursor-not-allowed border-transparent',
-                // Updated highlight class application:
                 isBonusCell && isVisible && 'brightness-125 ring-2 ring-yellow-500/40'
               )}
             >
