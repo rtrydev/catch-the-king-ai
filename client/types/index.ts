@@ -1,5 +1,5 @@
 export interface CellInfo {
-  value: number | null;
+  value: number | null; // null if hidden
   revealed: boolean;
   known: boolean;
 }
@@ -12,7 +12,7 @@ export interface GameStateResponse {
   game_over: boolean;
   rows_completed: boolean[];
   cols_completed: boolean[];
-  valid_moves: number[][];
+  valid_moves: number[][]; // [row, col]
   is_manual: boolean;
 }
 
@@ -28,8 +28,11 @@ export interface MoveResponse {
 export interface HintResponse {
   recommended_move: number[]; // [row, col]
   confidence: number;
-  all_moves_ranked: any[];
+  all_moves_ranked: { row: number; col: number; q_value: number }[];
 }
+
+export const CARD_K = 6;
+export const POINTS: Record<number, number> = { 1: 10, 2: 20, 3: 30, 4: 40, 5: 50, 6: 100 };
 
 export type GameMode = 'auto' | 'manual' | 'eval';
 
