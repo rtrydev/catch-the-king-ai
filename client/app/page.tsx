@@ -18,7 +18,9 @@ import {
   Play,
   Square,
   Activity,
-  Zap
+  Zap,
+  TrendingUp,
+  TrendingDown
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -351,7 +353,8 @@ export default function CatchTheKing() {
     // Colors
     const cBarGold = '#eab308'; // Yellow-500
     const cBarSilver = '#94a3b8'; // Slate-400 (Silver-ish)
-    const cBarLow = '#334155'; // Slate-700 (Darker)
+    const cBarBlue = '#60a5fa'; // Blue-400 (Light Blue for < 400)
+    const cBarLow = '#334155'; // Slate-700 (Unused for bars now, but kept for reference)
     const cText = '#94a3b8'; // Slate 400
 
     ctx.clearRect(0, 0, w, h);
@@ -397,9 +400,10 @@ export default function CatchTheKing() {
       const bx = tGraphX + (i * barW);
       const by = tGraphY + tGraphH - bh;
 
+      // Color Logic
       if (score >= SCORE_GOLD) ctx.fillStyle = cBarGold;
       else if (score >= SCORE_SILVER) ctx.fillStyle = cBarSilver;
-      else ctx.fillStyle = cBarLow;
+      else ctx.fillStyle = cBarBlue; // Light blue for < 400
 
       if (hoveredData?.index === i) {
         ctx.fillStyle = '#ffffff';
@@ -496,7 +500,7 @@ export default function CatchTheKing() {
       // Color Logic based on thresholds
       if (b >= SCORE_GOLD) ctx.fillStyle = cBarGold;
       else if (b >= SCORE_SILVER) ctx.fillStyle = cBarSilver;
-      else ctx.fillStyle = cBarLow;
+      else ctx.fillStyle = cBarBlue; // Light blue for < 400
 
       // Rounded top bars
       const bw = Math.max(histBarW - (2 * dpr), 1);
@@ -530,6 +534,8 @@ export default function CatchTheKing() {
 
   // --- Metrics Calculation ---
   const avgScore = evalScores.length ? Math.round(evalScores.reduce((a, b) => a + b, 0) / evalScores.length) : 0;
+  const minScore = evalScores.length ? Math.min(...evalScores) : 0;
+  const maxScore = evalScores.length ? Math.max(...evalScores) : 0;
   const silverCount = evalScores.filter(s => s >= SCORE_SILVER).length;
   const goldCount = evalScores.filter(s => s >= SCORE_GOLD).length;
   const silverPct = evalScores.length ? ((silverCount / evalScores.length) * 100).toFixed(1) : "0.0";
@@ -596,14 +602,17 @@ export default function CatchTheKing() {
         </header>
 
         {/* --- MAIN CONTENT AREA --- */}
-        <div className="grid lg:grid-cols-[1fr_350px] gap-8">
+        <div className={cn(
+          "grid gap-8 transition-all duration-500",
+          gameMode === 'eval' ? "grid-cols-1 max-w-5xl mx-auto w-full" : "lg:grid-cols-[1fr_350px]"
+        )}>
 
-          {/* LEFT COLUMN */}
+          {/* LEFT COLUMN (In Eval mode, this becomes the only column) */}
           <div className="flex flex-col gap-6">
 
             {gameMode === 'eval' ? (
               // --- EVALUATION MODE UI ---
-              <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-8 duration-500">
+              <div key="eval-ui" className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-8 duration-500">
 
                 {/* 1. Control Deck */}
                 <div className="bg-slate-900/60 backdrop-blur-xl border border-slate-700/50 p-6 rounded-2xl shadow-2xl flex flex-wrap items-center justify-between gap-6">
@@ -655,34 +664,45 @@ export default function CatchTheKing() {
                 </div>
 
                 {/* 2. Metrics Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="bg-slate-900/40 backdrop-blur border border-slate-700/50 p-5 rounded-xl flex items-center gap-4">
-                     <div className="p-3 bg-slate-800 rounded-lg text-slate-300"><Activity size={24}/></div>
-                     <div>
-                       <div className="text-slate-400 text-xs uppercase font-bold">Avg Score</div>
-                       <div className="text-3xl font-bold text-white tracking-tight">{avgScore}</div>
-                     </div>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                  {/* Min Score */}
+                  <div className="bg-slate-900/40 backdrop-blur border border-slate-700/50 p-4 rounded-xl flex flex-col items-center justify-center gap-1 text-center group hover:bg-slate-900/60 transition-colors">
+                     <TrendingDown size={20} className="text-pink-400 mb-1"/>
+                     <div className="text-slate-400 text-[10px] uppercase font-bold tracking-wider">Min Score</div>
+                     <div className="text-2xl font-bold text-pink-100 tracking-tight">{minScore}</div>
                   </div>
-                  <div className="bg-slate-900/40 backdrop-blur border border-slate-700/50 p-5 rounded-xl flex items-center gap-4 relative overflow-hidden group">
-                     <div className="absolute right-0 top-0 opacity-10 group-hover:opacity-20 transition-opacity"><Medal size={80}/></div>
-                     <div className="p-3 bg-slate-800 rounded-lg text-slate-200"><Medal size={24}/></div>
-                     <div>
-                       <div className="text-slate-400 text-xs uppercase font-bold">Silver Rate</div>
-                       <div className="text-3xl font-bold text-slate-200 tracking-tight">{silverPct}%</div>
-                     </div>
+
+                  {/* Avg Score */}
+                  <div className="bg-slate-900/40 backdrop-blur border border-slate-700/50 p-4 rounded-xl flex flex-col items-center justify-center gap-1 text-center group hover:bg-slate-900/60 transition-colors">
+                     <Activity size={20} className="text-indigo-400 mb-1"/>
+                     <div className="text-slate-400 text-[10px] uppercase font-bold tracking-wider">Avg Score</div>
+                     <div className="text-2xl font-bold text-white tracking-tight">{avgScore}</div>
                   </div>
-                  <div className="bg-slate-900/40 backdrop-blur border border-slate-700/50 p-5 rounded-xl flex items-center gap-4 relative overflow-hidden group">
-                     <div className="absolute right-0 top-0 opacity-10 group-hover:opacity-20 transition-opacity text-yellow-500"><Trophy size={80}/></div>
-                     <div className="p-3 bg-yellow-900/20 rounded-lg text-yellow-400"><Trophy size={24}/></div>
-                     <div>
-                       <div className="text-slate-400 text-xs uppercase font-bold">Gold Rate</div>
-                       <div className="text-3xl font-bold text-yellow-400 tracking-tight">{goldPct}%</div>
-                     </div>
+
+                  {/* Max Score */}
+                  <div className="bg-slate-900/40 backdrop-blur border border-slate-700/50 p-4 rounded-xl flex flex-col items-center justify-center gap-1 text-center group hover:bg-slate-900/60 transition-colors">
+                     <TrendingUp size={20} className="text-cyan-400 mb-1"/>
+                     <div className="text-slate-400 text-[10px] uppercase font-bold tracking-wider">Max Score</div>
+                     <div className="text-2xl font-bold text-cyan-100 tracking-tight">{maxScore}</div>
+                  </div>
+
+                   {/* Silver Rate */}
+                  <div className="bg-slate-900/40 backdrop-blur border border-slate-700/50 p-4 rounded-xl flex flex-col items-center justify-center gap-1 text-center group hover:bg-slate-900/60 transition-colors">
+                     <Medal size={20} className="text-slate-300 mb-1"/>
+                     <div className="text-slate-400 text-[10px] uppercase font-bold tracking-wider">Silver Rate</div>
+                     <div className="text-2xl font-bold text-slate-200 tracking-tight">{silverPct}%</div>
+                  </div>
+
+                  {/* Gold Rate */}
+                  <div className="bg-slate-900/40 backdrop-blur border border-slate-700/50 p-4 rounded-xl flex flex-col items-center justify-center gap-1 text-center group hover:bg-slate-900/60 transition-colors">
+                     <Trophy size={20} className="text-yellow-400 mb-1"/>
+                     <div className="text-slate-400 text-[10px] uppercase font-bold tracking-wider">Gold Rate</div>
+                     <div className="text-2xl font-bold text-yellow-400 tracking-tight">{goldPct}%</div>
                   </div>
                 </div>
 
                 {/* 3. Dual Visualization Canvas */}
-                <div className="relative w-full aspect-[9/10] sm:aspect-[4/3] bg-transparent rounded-2xl overflow-hidden shadow-2xl">
+                <div className="relative w-full aspect-[9/10] sm:aspect-[2/1] bg-transparent rounded-2xl overflow-hidden shadow-2xl">
                   <canvas
                     ref={canvasRef}
                     onMouseMove={handleCanvasMouseMove}
@@ -712,7 +732,7 @@ export default function CatchTheKing() {
             ) : (
               // --- STANDARD GAME UI ---
               <>
-                <div className="relative w-full max-w-[600px] mx-auto bg-slate-900/60 backdrop-blur-xl p-6 rounded-2xl border border-slate-700/50 shadow-[0_0_50px_rgba(0,0,0,0.5)]">
+                <div key="game-ui" className="relative w-full max-w-[600px] mx-auto bg-slate-900/60 backdrop-blur-xl p-6 rounded-2xl border border-slate-700/50 shadow-[0_0_50px_rgba(0,0,0,0.5)]">
                   {loading && !gameState ? (
                      <div className="h-96 flex flex-col items-center justify-center text-slate-400 animate-pulse">
                         <div className="w-16 h-16 border-4 border-slate-700 border-t-emerald-500 rounded-full animate-spin mb-4"></div>
