@@ -494,19 +494,21 @@ class GameState:
             step_reward = -50
         elif info['re_hidden']:
             if player_card == CARD_5 and board_card != CARD_5 and not self.grid_revealed[r][c]:
-                 step_reward = -15
+                step_reward = -15
             else:
-                 step_reward = -5 if was_unknown else -30
+                step_reward = 5 if was_unknown else -30
         elif info['hand_popped']:
             if player_card == CARD_K:
                 step_reward = 50
-            else:
+            elif player_card == CARD_5 or was_unknown:
                 step_reward = 5
+            else:
+                step_reward = -40
         elif not info['hand_popped'] and not info['re_hidden']:
             step_reward = 15
 
         if self.game_over and self.score < 100 and player_card == CARD_K:
-             step_reward = -100
+            step_reward = -100
 
         reward = (self.score - prev_score) + step_reward
         return self.get_observation_vector(), reward, self.game_over
