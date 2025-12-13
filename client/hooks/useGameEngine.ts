@@ -52,7 +52,7 @@ export function useGameEngine(gameMode: GameMode) {
 
     // Handle trap hint
     if (res.show_hint) {
-      const neighbors = [];
+      const neighbors: any[] = [];
       for (let i = -1; i <= 1; i++) {
         for (let j = -1; j <= 1; j++) {
           if (i === 0 && j === 0) continue;

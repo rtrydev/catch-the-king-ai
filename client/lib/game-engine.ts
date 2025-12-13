@@ -8,16 +8,16 @@ export class CatchTheKingEngine {
   private readonly FULL_DECK_COUNTS: Record<number, number> = { 1: 7, 2: 4, 3: 5, 4: 5, 5: 3, 6: 1 };
 
   // State
-  public gridValues: number[][];
-  public gridRevealed: boolean[][];
-  public gridKnown: boolean[][];
-  public hand: number[];
-  public score: number;
-  public gameOver: boolean;
-  public rowsCompleted: boolean[];
-  public colsCompleted: boolean[];
+  public gridValues: number[][] = [];
+  public gridRevealed: boolean[][] = [];
+  public gridKnown: boolean[][] = [];
+  public hand: number[] = [];
+  public score: number = 0;
+  public gameOver: boolean = false;
+  public rowsCompleted: boolean[] = [];
+  public colsCompleted: boolean[] = [];
   public manualMode: boolean;
-  public manualHints: Set<string>; // Stores "r,c" strings
+  public manualHints: Set<string> = new Set();
 
   constructor(manualMode: boolean = false) {
     this.manualMode = manualMode;

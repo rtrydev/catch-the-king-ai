@@ -1,6 +1,6 @@
 import * as ort from "onnxruntime-web";
 import { CatchTheKingEngine } from "./game-engine";
-import { HintResponse } from "./types";
+import { HintResponse } from "@/types";
 
 const INPUT_SIZE = 157; // 150 grid features + 7 scalars
 
