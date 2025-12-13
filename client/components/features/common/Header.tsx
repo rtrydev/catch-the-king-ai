@@ -24,12 +24,12 @@ export const Header: React.FC<HeaderProps> = ({ gameMode, setGameMode }) => {
   };
 
   return (
-    <header className="flex flex-col md:flex-row justify-between items-end md:items-center gap-4 pb-4 border-b border-slate-800/60">
-      <div>
+    <header className="flex flex-col md:flex-row justify-between items-center gap-4 pb-4 border-b border-slate-800/60">
+      <div className="text-center md:text-left">
         <h1 className="text-4xl font-extrabold tracking-tight bg-gradient-to-r from-emerald-400 via-cyan-400 to-indigo-400 bg-clip-text text-transparent drop-shadow-sm">
           Catch the King
         </h1>
-        <p className="text-slate-400 font-medium text-sm mt-1 flex items-center gap-2">
+        <p className="text-slate-400 font-medium text-sm mt-1 flex items-center justify-center md:justify-start gap-2">
           {gameMode === 'eval' ? (
             <Activity size={16} className="text-indigo-400" />
           ) : (
@@ -45,7 +45,7 @@ export const Header: React.FC<HeaderProps> = ({ gameMode, setGameMode }) => {
             key={m}
             onClick={() => setGameMode(m)}
             className={cn(
-              'px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 cursor-pointer',
+              'px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-1.5 sm:gap-2 cursor-pointer',
               gameMode === m
                 ? 'bg-slate-700 text-white shadow-inner'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'

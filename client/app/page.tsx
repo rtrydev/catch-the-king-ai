@@ -83,7 +83,7 @@ export default function CatchTheKing() {
             ) : (
               // GAME UI
               <>
-                <div key="game-ui" className="relative w-full max-w-[600px] mx-auto bg-slate-900/60 backdrop-blur-xl p-6 rounded-2xl border border-slate-700/50 shadow-[0_0_50px_rgba(0,0,0,0.5)]">
+                <div key="game-ui" className="relative w-full max-w-[600px] mx-auto bg-slate-900/60 backdrop-blur-xl p-4 sm:p-6 rounded-2xl border border-slate-700/50 shadow-[0_0_50px_rgba(0,0,0,0.5)]">
                    <GameBoard
                       gameState={gameState!}
                       loading={loading}

@@ -12,7 +12,7 @@ export const EvaluationChart: React.FC<Props> = ({ scores, isActive }) => {
   const { canvasRef, hoveredData, handleCanvasMouseMove, handleCanvasMouseLeave } = useChartCanvas(scores, isActive);
 
   return (
-    <div className="relative w-full aspect-[9/10] sm:aspect-[2/1] bg-transparent rounded-2xl overflow-hidden shadow-2xl">
+    <div className="relative w-full aspect-[9/10] sm:aspect-[2/1] bg-transparent rounded-2xl overflow-hidden">
       <canvas
         ref={canvasRef}
         onMouseMove={handleCanvasMouseMove}

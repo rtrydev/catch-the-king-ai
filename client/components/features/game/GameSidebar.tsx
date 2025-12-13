@@ -28,12 +28,18 @@ export const GameSidebar: React.FC<Props> = ({
   const isSilver = gameState.score >= SCORE_SILVER;
   const isGold = gameState.score >= SCORE_GOLD;
 
+  // Define max score for the bar scale (must be higher than gold to show progress past it)
+  const MAX_SCORE = 600;
+  const scorePercent = Math.min(100, (gameState.score / MAX_SCORE) * 100);
+  const silverPercent = (SCORE_SILVER / MAX_SCORE) * 100;
+  const goldPercent = (SCORE_GOLD / MAX_SCORE) * 100;
+
   return (
     <div className="flex flex-col gap-6 animate-in slide-in-from-right-8 duration-500">
       {/* Score Card */}
       <div className="bg-slate-900/60 backdrop-blur-xl border border-slate-700/50 p-6 rounded-2xl shadow-xl relative overflow-hidden group">
         {gameState.game_over && (
-          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 text-center animate-in fade-in">
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 text-center animate-in fade-in">
             {isGold ? (
               <Trophy size={48} className="text-yellow-400 mb-2 animate-bounce" />
             ) : isSilver ? (
@@ -53,19 +59,61 @@ export const GameSidebar: React.FC<Props> = ({
             </button>
           </div>
         )}
-        <div className="flex justify-between items-end mb-2 relative z-0">
+
+        {/* Header */}
+        <div className="flex justify-between items-end mb-4 relative z-0">
           <span className="text-slate-400 text-xs uppercase font-bold tracking-wider">Score</span>
           <span className="text-5xl font-black text-white tracking-tighter">{gameState.score}</span>
         </div>
-        <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden relative z-0">
-          <div
-            className="h-full bg-gradient-to-r from-emerald-500 via-cyan-500 to-yellow-500 transition-all duration-700"
-            style={{ width: `${Math.min(100, (gameState.score / 600) * 100)}%` }}
-          />
-        </div>
-        <div className="flex justify-between text-[10px] uppercase font-bold text-slate-500 mt-2 relative z-0">
-          <span className={isSilver ? 'text-emerald-400' : ''}>{SCORE_SILVER}</span>
-          <span className={isGold ? 'text-yellow-400' : ''}>{SCORE_GOLD}</span>
+
+        {/* Progress Bar Container */}
+        <div className="relative w-full z-0 mb-1">
+          {/* Track */}
+          <div className="w-full h-3 bg-slate-800 rounded-full overflow-hidden relative">
+            {/* Fill */}
+            <div
+              className="h-full bg-gradient-to-r from-emerald-500 via-cyan-500 to-yellow-500 transition-all duration-700 ease-out"
+              style={{ width: `${scorePercent}%` }}
+            />
+
+            {/* Tick Marks on the bar */}
+            <div
+              className="absolute top-0 bottom-0 w-0.5 bg-slate-950/30 border-r border-white/10"
+              style={{ left: `${silverPercent}%` }}
+            />
+            <div
+              className="absolute top-0 bottom-0 w-0.5 bg-slate-950/30 border-r border-white/10"
+              style={{ left: `${goldPercent}%` }}
+            />
+          </div>
+
+          {/* Labels */}
+          <div className="relative w-full h-4 mt-1 text-[10px] font-bold text-slate-500 uppercase">
+            {/* 0 Start */}
+            <span className="absolute left-0 transform -translate-x-0">0</span>
+
+            {/* Silver Label */}
+            <span
+              className={cn(
+                "absolute transform -translate-x-1/2 transition-colors duration-300",
+                isSilver ? 'text-emerald-400' : ''
+              )}
+              style={{ left: `${silverPercent}%` }}
+            >
+              {SCORE_SILVER}
+            </span>
+
+            {/* Gold Label */}
+            <span
+              className={cn(
+                "absolute transform -translate-x-1/2 transition-colors duration-300",
+                isGold ? 'text-yellow-400' : ''
+              )}
+              style={{ left: `${goldPercent}%` }}
+            >
+              {SCORE_GOLD}
+            </span>
+          </div>
         </div>
       </div>
 

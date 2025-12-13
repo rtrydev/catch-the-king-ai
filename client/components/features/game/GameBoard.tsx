@@ -25,7 +25,7 @@ export const GameBoard: React.FC<Props> = ({ gameState, loading, gameMode, visua
   if (!gameState) return null;
 
   return (
-    <div className="grid grid-cols-5 gap-3 w-full">
+    <div className="grid grid-cols-5 gap-2 sm:gap-3 w-full">
       {gameState.grid.map((row, rIndex) =>
         row.map((cell, cIndex) => {
           const isTempRevealed = visuals.tempRevealed?.r === rIndex && visuals.tempRevealed?.c === cIndex;

@@ -25,7 +25,7 @@ export const EvaluationDashboard: React.FC<Props> = ({ scores, target, setTarget
   return (
     <div key="eval-ui" className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-8 duration-500">
       {/* 1. Control Deck */}
-      <div className="bg-slate-900/60 backdrop-blur-xl border border-slate-700/50 p-6 rounded-2xl shadow-2xl flex flex-wrap items-center justify-between gap-6">
+      <div className="bg-slate-900/60 backdrop-blur-xl border border-slate-700/50 p-4 sm:p-6 rounded-2xl shadow-2xl flex flex-col sm:flex-row flex-wrap items-center justify-center sm:justify-between gap-4 sm:gap-6">
         <div className="flex items-center gap-4">
           <div className="flex flex-col">
             <label className="text-xs text-slate-400 uppercase font-bold tracking-wider mb-1">Simulations</label>
@@ -57,7 +57,7 @@ export const EvaluationDashboard: React.FC<Props> = ({ scores, target, setTarget
 
         {/* Progress */}
         <div className="flex items-center gap-4">
-          <div className="text-right">
+          <div className="text-center sm:text-right">
             <div className="text-xs text-slate-400 uppercase font-bold">Games Played</div>
             <div className="text-2xl font-mono text-white">
               {scores.length} <span className="text-slate-500">/ {target}</span>
@@ -88,7 +88,7 @@ export const EvaluationDashboard: React.FC<Props> = ({ scores, target, setTarget
 };
 
 const MetricCard = ({ icon: Icon, color, label, value, valColor }: any) => (
-  <div className="bg-slate-900/40 backdrop-blur border border-slate-700/50 p-4 rounded-xl flex flex-col items-center justify-center gap-1 text-center group hover:bg-slate-900/60 transition-colors">
+  <div className="bg-slate-900/40 backdrop-blur border border-slate-700/50 p-3 sm:p-4 rounded-xl flex flex-col items-center justify-center gap-1 text-center group hover:bg-slate-900/60 transition-colors">
     <Icon size={20} className={`${color} mb-1`} />
     <div className="text-slate-400 text-[10px] uppercase font-bold tracking-wider">{label}</div>
     <div className={`text-2xl font-bold tracking-tight ${valColor}`}>{value}</div>
