@@ -15,6 +15,7 @@ export interface GameStateResponse {
   rows_completed: boolean[];
   cols_completed: boolean[];
   valid_moves: number[][]; // [row, col]
+  is_manual: boolean
 }
 
 export interface MoveResponse {

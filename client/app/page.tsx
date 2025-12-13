@@ -10,11 +10,15 @@ import {
   RotateCcw,
   Trophy,
   Swords,
-  HelpCircle,
   Medal,
   Frown,
   Check,
-  Target
+  Target,
+  BarChart3,
+  Play,
+  Square,
+  Activity,
+  Zap
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -24,16 +28,22 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+// --- Constants ---
+const SCORE_SILVER = 400;
+const SCORE_GOLD = 550;
+
+// --- Visual Helpers ---
+
 const getCardColor = (value: number | null) => {
-  if (value === null) return 'bg-slate-800 border-slate-700';
+  if (value === null) return 'bg-slate-800/80 border-slate-700/50';
   switch (value) {
-    case 1: return 'bg-emerald-900/80 border-emerald-500/50 text-emerald-200';
-    case 2: return 'bg-blue-900/80 border-blue-500/50 text-blue-200';
-    case 3: return 'bg-indigo-900/80 border-indigo-500/50 text-indigo-200';
-    case 4: return 'bg-purple-900/80 border-purple-500/50 text-purple-200';
-    case 5: return 'bg-orange-900/80 border-orange-500/50 text-orange-200';
-    case 6: return 'bg-yellow-900/80 border-yellow-500/50 text-yellow-200';
-    default: return 'bg-slate-800';
+    case 1: return 'bg-emerald-900/90 border-emerald-500/50 text-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.2)]';
+    case 2: return 'bg-blue-900/90 border-blue-500/50 text-blue-300 shadow-[0_0_15px_rgba(59,130,246,0.2)]';
+    case 3: return 'bg-indigo-900/90 border-indigo-500/50 text-indigo-300 shadow-[0_0_15px_rgba(99,102,241,0.2)]';
+    case 4: return 'bg-purple-900/90 border-purple-500/50 text-purple-300 shadow-[0_0_15px_rgba(168,85,247,0.2)]';
+    case 5: return 'bg-orange-900/90 border-orange-500/50 text-orange-300 shadow-[0_0_15px_rgba(249,115,22,0.2)]';
+    case 6: return 'bg-yellow-900/90 border-yellow-500/50 text-yellow-300 shadow-[0_0_15px_rgba(234,179,8,0.2)]';
+    default: return 'bg-slate-800/80';
   }
 };
 
@@ -43,47 +53,67 @@ export default function CatchTheKing() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [gameState, setGameState] = useState<GameStateResponse | null>(null);
   const [loading, setLoading] = useState(false);
-  const [isManualMode, setIsManualMode] = useState(false);
+  const [gameMode, setGameMode] = useState<'auto' | 'manual' | 'eval'>('auto');
 
   // Visual states
   const [tempRevealed, setTempRevealed] = useState<{r: number, c: number, val: number} | null>(null);
   const [trapHintCells, setTrapHintCells] = useState<number[][]>([]);
   const [aiHintCell, setAiHintCell] = useState<{r: number, c: number} | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
-  const [autoMode, setAutoMode] = useState(false);
+  const [autoPlayActive, setAutoPlayActive] = useState(false);
 
-  // Manual Mode State (Inline Panel)
+  // Manual Mode State
   const [selectedCell, setSelectedCell] = useState<{r: number, c: number} | null>(null);
   const [inputVal, setInputVal] = useState<number | null>(null);
   const [inputHint, setInputHint] = useState(false);
+
+  // Evaluation Mode State
+  const [evalTarget, setEvalTarget] = useState<number>(100);
+  const [evalScores, setEvalScores] = useState<number[]>([]);
+  const [isEvalRunning, setIsEvalRunning] = useState(false);
+  const [hoveredData, setHoveredData] = useState<{ index: number; score: number; x: number; y: number } | null>(null);
+
+  const stopEvalRef = useRef(false);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   // Timer refs
   const tempRevealedTimerRef = useRef<NodeJS.Timeout | null>(null);
   const trapHintTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  useEffect(() => {
-    startNewGame(false);
+  // --- Helper to clear visual hints immediately ---
+  const clearVisualHints = useCallback(() => {
+    if (tempRevealedTimerRef.current) {
+      clearTimeout(tempRevealedTimerRef.current);
+      tempRevealedTimerRef.current = null;
+    }
+    if (trapHintTimerRef.current) {
+      clearTimeout(trapHintTimerRef.current);
+      trapHintTimerRef.current = null;
+    }
+    setTempRevealed(null);
+    setTrapHintCells([]);
   }, []);
+
+  useEffect(() => {
+    if (gameMode !== 'eval') {
+      startNewGame(gameMode === 'manual');
+    }
+  }, [gameMode]);
 
   const startNewGame = async (manual: boolean) => {
     setLoading(true);
-    setAutoMode(false);
-    setIsManualMode(manual);
+    setAutoPlayActive(false);
+    clearVisualHints();
     try {
       const { session_id } = await api.createGame(manual);
       setSessionId(session_id);
       const state = await api.getState(session_id);
       setGameState(state);
-      setTempRevealed(null);
-      setTrapHintCells([]);
       setAiHintCell(null);
-
-      // Reset inputs
       setInputVal(null);
       setInputHint(false);
 
       if (manual) {
-        // AUTOMATION: Immediately get the first hint and select it
         try {
           const hint = await api.getHint(session_id);
           const [r, c] = hint.recommended_move;
@@ -95,7 +125,6 @@ export default function CatchTheKing() {
       } else {
         setSelectedCell(null);
       }
-
     } catch (e) {
       console.error("Failed to start game", e);
     } finally {
@@ -103,46 +132,29 @@ export default function CatchTheKing() {
     }
   };
 
+  // --- Handlers ---
   const handleTileClick = (row: number, col: number) => {
-    if (!sessionId || !gameState || gameState.game_over) return;
-
-    // In Manual Mode: STRICTLY DISALLOW user selection changes.
-    // The selection is driven purely by the AI flow.
-    if (gameState.is_manual) {
-      return;
-    } else {
-      // Auto Mode: Execute immediately
-      handleAutoMove(row, col);
-    }
+    if (!sessionId || !gameState || gameState.game_over || gameState.is_manual) return;
+    handleAutoMove(row, col);
   };
 
   const handleManualSubmit = async () => {
     if (!selectedCell || !sessionId || inputVal === null) return;
-
-    const targetR = selectedCell.r;
-    const targetC = selectedCell.c;
-    const val = inputVal;
-    const hint = inputHint;
-
-    // Visual feedback that something is processing
+    const { r, c } = selectedCell;
+    clearVisualHints();
     setAiLoading(true);
 
     try {
-      const res = await api.makeManualMove(sessionId, targetR, targetC, val, hint);
-      await processMoveResult(res, targetR, targetC, val);
-
-      // AUTOMATION: If game isn't over, immediately select next field via AI
+      const res = await api.makeManualMove(sessionId, r, c, inputVal, inputHint);
+      await processMoveResult(res, r, c, inputVal);
       if (!res.game_over) {
         const nextHint = await api.getHint(sessionId);
-        const [r, c] = nextHint.recommended_move;
-
-        // Update UI for the next move
-        setAiHintCell({ r, c });
-        setSelectedCell({ r, c });
+        const [nr, nc] = nextHint.recommended_move;
+        setAiHintCell({ r: nr, c: nc });
+        setSelectedCell({ r: nr, c: nc });
         setInputVal(null);
         setInputHint(false);
       } else {
-        // Game Over: Clear selection
         setSelectedCell(null);
         setAiHintCell(null);
       }
@@ -156,10 +168,10 @@ export default function CatchTheKing() {
   const handleAutoMove = async (row: number, col: number) => {
     if (!sessionId) return;
     setAiHintCell(null);
+    clearVisualHints();
 
     try {
       const res = await api.makeMove(sessionId, row, col);
-      // Fetch fresh state to know the value if needed
       const newState = await api.getState(sessionId);
       const val = newState.grid[row][col].value;
       processMoveResult(res, row, col, val, newState);
@@ -168,19 +180,10 @@ export default function CatchTheKing() {
     }
   };
 
-  const processMoveResult = async (
-    res: any,
-    row: number,
-    col: number,
-    knownValue: number | null,
-    providedState?: GameStateResponse
-  ) => {
+  const processMoveResult = async (res: any, row: number, col: number, knownValue: number | null, providedState?: GameStateResponse) => {
     if (!sessionId) return;
-
-    // Use provided state or fetch fresh
     const newState = providedState || await api.getState(sessionId);
 
-    // Visual flare for hints
     if (res.re_hidden && knownValue !== null) {
       setTempRevealed({ r: row, c: col, val: knownValue });
       if (tempRevealedTimerRef.current) clearTimeout(tempRevealedTimerRef.current);
@@ -207,23 +210,21 @@ export default function CatchTheKing() {
       }, 1500);
     }
 
-    if (res.game_over && res.score >= 400) {
+    if (res.game_over && res.score >= SCORE_SILVER && gameMode !== 'eval') {
       confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
     }
-
     setGameState(newState);
   };
 
   const handleAskAI = async () => {
     if (!sessionId || !gameState || gameState.game_over || aiLoading) return;
+    clearVisualHints();
     setAiLoading(true);
     try {
       const hint = await api.getHint(sessionId);
       const [r, c] = hint.recommended_move;
       setAiHintCell({ r, c });
-
-      // Automatically select the AI recommended cell in manual mode
-      if (isManualMode) {
+      if (gameMode === 'manual') {
         setSelectedCell({ r, c });
         setInputVal(null);
         setInputHint(false);
@@ -235,9 +236,8 @@ export default function CatchTheKing() {
     }
   };
 
-  // Auto-play logic (Only for Auto Mode games)
   useEffect(() => {
-    if (!autoMode || !sessionId || !gameState || gameState.game_over || aiLoading || isManualMode) {
+    if (!autoPlayActive || !sessionId || !gameState || gameState.game_over || aiLoading || gameMode === 'manual' || gameMode === 'eval') {
       return;
     }
     const timeoutId = setTimeout(async () => {
@@ -247,371 +247,666 @@ export default function CatchTheKing() {
         setAiHintCell({ r, c });
         setTimeout(() => handleAutoMove(r, c), 200);
       } catch (e) {
-        setAutoMode(false);
+        setAutoPlayActive(false);
       }
-    }, 1000);
+    }, 800);
     return () => clearTimeout(timeoutId);
-  }, [autoMode, sessionId, gameState, aiLoading, isManualMode]);
+  }, [autoPlayActive, sessionId, gameState, aiLoading, gameMode]);
 
-  // --- Render ---
+  // --- Evaluation Logic ---
+  const runEvaluation = async () => {
+    if (isEvalRunning) return;
+    setIsEvalRunning(true);
+    setEvalScores([]);
+    stopEvalRef.current = false;
+    const scores: number[] = [];
 
-  if (loading || !gameState) {
-    return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-400">
-        <div className="animate-pulse flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-slate-600 border-t-emerald-500 rounded-full animate-spin"></div>
-          <p>Loading Game...</p>
-        </div>
-      </div>
-    );
-  }
+    for (let i = 0; i < evalTarget; i++) {
+      if (stopEvalRef.current) break;
+      try {
+        const { session_id: sId } = await api.createGame(false);
+        let gameOver = false;
+        let score = 0;
+        while (!gameOver) {
+          if (stopEvalRef.current) break;
+          const hint = await api.getHint(sId);
+          const [r, c] = hint.recommended_move;
+          const res = await api.makeMove(sId, r, c);
+          if (res.game_over) {
+            gameOver = true;
+            score = res.score;
+          }
+        }
+        if (!stopEvalRef.current) {
+          scores.push(score);
+          setEvalScores([...scores]);
+        }
+      } catch (err) { console.error("Eval error", err); }
+      // Brief pause to allow UI update
+      if (i % 2 === 0) await new Promise(r => setTimeout(r, 0));
+    }
+    setIsEvalRunning(false);
+  };
 
-  const isSilver = gameState.score >= 400;
-  const isGold = gameState.score >= 550;
+  // --- Canvas Interaction Logic ---
+  const handleCanvasMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (gameMode !== 'eval' || evalScores.length === 0 || !canvasRef.current) return;
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+
+    const mouseX = (e.clientX - rect.left) * scaleX;
+    const mouseY = (e.clientY - rect.top) * scaleY;
+
+    // Dimensions (must match Draw logic)
+    const padding = 20 * (window.devicePixelRatio || 1);
+    const topChartHeight = (canvas.height / 2) - padding;
+
+    // Only interact with the Top Chart (Timeline)
+    if (mouseY > topChartHeight + padding) {
+      setHoveredData(null);
+      return;
+    }
+
+    // Graph Width calc
+    const graphW = canvas.width - (padding * 2);
+    const barWidth = graphW / evalScores.length;
+
+    // Find Index
+    if (mouseX >= padding && mouseX <= canvas.width - padding) {
+      const index = Math.floor((mouseX - padding) / barWidth);
+      if (index >= 0 && index < evalScores.length) {
+        setHoveredData({
+          index,
+          score: evalScores[index],
+          x: mouseX / scaleX,
+          y: mouseY / scaleY
+        });
+        return;
+      }
+    }
+    setHoveredData(null);
+  };
+
+  const handleCanvasMouseLeave = () => setHoveredData(null);
+
+  // --- Canvas Drawing (Updated Thresholds & Dynamic Range) ---
+  useEffect(() => {
+    if (gameMode !== 'eval' || !canvasRef.current) return;
+
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+
+    const w = canvas.width;
+    const h = canvas.height;
+    const p = 20 * dpr; // padding
+
+    // Colors
+    const cBarGold = '#eab308'; // Yellow-500
+    const cBarSilver = '#94a3b8'; // Slate-400 (Silver-ish)
+    const cBarLow = '#334155'; // Slate-700 (Darker)
+    const cText = '#94a3b8'; // Slate 400
+
+    ctx.clearRect(0, 0, w, h);
+
+    if (evalScores.length === 0) {
+      ctx.fillStyle = cText;
+      ctx.font = `${16 * dpr}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillText("Ready to Evaluate", w/2, h/2);
+      return;
+    }
+
+    // --- 1. TOP CHART: Game Timeline ---
+    const topH = (h / 2) - (p * 1.5);
+    const topY = p;
+
+    // Background Rect
+    ctx.fillStyle = '#0f172a'; // slightly lighter than main bg
+    ctx.beginPath();
+    ctx.roundRect(0, 0, w, topH + p, 12 * dpr);
+    ctx.fill();
+
+    // Title
+    ctx.fillStyle = '#e2e8f0';
+    ctx.font = `bold ${12 * dpr}px sans-serif`;
+    ctx.textAlign = 'left';
+    ctx.fillText(`GAME TIMELINE (LAST ${evalScores.length})`, p, p * 1.5);
+
+    // Chart Area
+    const tGraphX = p;
+    const tGraphY = p * 2.5;
+    const tGraphW = w - (p * 2);
+    const tGraphH = topH - (p * 1.5);
+
+    // Timeline Scale usually fixed to show performance relative to Max possible
+    const maxValTimeline = Math.max(650, ...evalScores);
+
+    const barW = tGraphW / evalScores.length;
+
+    // Draw Timeline Bars
+    evalScores.forEach((score, i) => {
+      const bh = (score / maxValTimeline) * tGraphH;
+      const bx = tGraphX + (i * barW);
+      const by = tGraphY + tGraphH - bh;
+
+      if (score >= SCORE_GOLD) ctx.fillStyle = cBarGold;
+      else if (score >= SCORE_SILVER) ctx.fillStyle = cBarSilver;
+      else ctx.fillStyle = cBarLow;
+
+      if (hoveredData?.index === i) {
+        ctx.fillStyle = '#ffffff';
+      }
+
+      ctx.fillRect(bx, by, Math.max(barW - (1 * dpr), 0.5 * dpr), bh);
+    });
+
+    // Threshold Line (Silver)
+    const ySilver = tGraphY + tGraphH - ((SCORE_SILVER / maxValTimeline) * tGraphH);
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.5)';
+    ctx.setLineDash([4 * dpr, 4 * dpr]);
+    ctx.lineWidth = 1 * dpr;
+    ctx.beginPath();
+    ctx.moveTo(tGraphX, ySilver);
+    ctx.lineTo(tGraphX + tGraphW, ySilver);
+    ctx.stroke();
+
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = `bold ${10 * dpr}px monospace`;
+    ctx.textAlign = 'right';
+    ctx.fillText(`${SCORE_SILVER}`, w - p, ySilver - 4);
+
+    // Threshold Line (Gold)
+    const yGold = tGraphY + tGraphH - ((SCORE_GOLD / maxValTimeline) * tGraphH);
+    ctx.strokeStyle = 'rgba(234, 179, 8, 0.4)';
+    ctx.beginPath();
+    ctx.moveTo(tGraphX, yGold);
+    ctx.lineTo(tGraphX + tGraphW, yGold);
+    ctx.stroke();
+
+    ctx.fillStyle = '#eab308';
+    ctx.fillText(`${SCORE_GOLD}`, w - p, yGold - 4);
+
+    ctx.setLineDash([]); // Reset
+
+    // --- 2. BOTTOM CHART: Score Distribution (Dynamic Range) ---
+    const botY = topH + (p * 2.5);
+    const botH = h - botY - p;
+
+    // Background Rect
+    ctx.fillStyle = '#0f172a';
+    ctx.beginPath();
+    ctx.roundRect(0, botY - p, w, botH + (p*2), 12 * dpr);
+    ctx.fill();
+
+    // Title
+    ctx.fillStyle = '#e2e8f0';
+    ctx.font = `bold ${12 * dpr}px sans-serif`;
+    ctx.textAlign = 'left';
+    ctx.fillText("SCORE DISTRIBUTION", p, botY);
+
+    // Dynamic Range Logic
+    const binSize = 10;
+    const rawMin = Math.min(...evalScores);
+    const rawMax = Math.max(...evalScores);
+
+    // Round down to nearest 50 for aesthetic start, or just use raw data?
+    // Usually rounding to nearest binSize is safer.
+    const minScore = Math.floor(rawMin / binSize) * binSize;
+    // Ensure max is at least min + some range
+    const maxScore = Math.max(Math.ceil(rawMax / binSize) * binSize, minScore + (binSize * 10));
+
+    const bins: Record<number, number> = {};
+    let maxFreq = 0;
+
+    evalScores.forEach(s => {
+      // Clamp just in case (though dynamics should cover it)
+      let val = s;
+      const b = Math.floor(val / binSize) * binSize;
+      bins[b] = (bins[b] || 0) + 1;
+      maxFreq = Math.max(maxFreq, bins[b]);
+    });
+
+    const bGraphX = p;
+    const bGraphY = botY + p;
+    const bGraphW = w - (p * 2);
+    const bGraphH = botH - (p * 2);
+
+    const totalBins = (maxScore - minScore) / binSize;
+    // Avoid division by zero
+    const safeTotalBins = totalBins < 1 ? 1 : totalBins + 1;
+    const histBarW = bGraphW / safeTotalBins;
+
+    // Draw Histogram
+    for (let b = minScore; b <= maxScore; b += binSize) {
+      const freq = bins[b] || 0;
+      const hBarH = maxFreq > 0 ? (freq / maxFreq) * bGraphH : 0;
+
+      const bIdx = (b - minScore) / binSize;
+      const bx = bGraphX + (bIdx * histBarW);
+      const by = bGraphY + bGraphH - hBarH;
+
+      // Color Logic based on thresholds
+      if (b >= SCORE_GOLD) ctx.fillStyle = cBarGold;
+      else if (b >= SCORE_SILVER) ctx.fillStyle = cBarSilver;
+      else ctx.fillStyle = cBarLow;
+
+      // Rounded top bars
+      const bw = Math.max(histBarW - (2 * dpr), 1);
+      ctx.beginPath();
+      if (hBarH > 0) {
+        ctx.roundRect(bx, by, bw, hBarH, [4 * dpr, 4 * dpr, 0, 0]);
+      } else {
+         // Tiny placeholder for 0
+         ctx.rect(bx, bGraphY + bGraphH - 1, bw, 1);
+      }
+      ctx.fill();
+
+      // X-Axis Labels (Dynamic spacing)
+      // Only draw label if it fits roughly
+      const labelStep = totalBins > 20 ? 5 : totalBins > 10 ? 2 : 1;
+      const currentBinIdx = (b - minScore) / binSize;
+
+      if (currentBinIdx % labelStep === 0) {
+        ctx.save();
+        ctx.translate(bx + (bw / 2), bGraphY + bGraphH + (10 * dpr));
+        ctx.rotate(-Math.PI / 4);
+        ctx.fillStyle = '#475569';
+        ctx.textAlign = 'right';
+        ctx.font = `${9 * dpr}px sans-serif`;
+        ctx.fillText(b.toString(), 0, 0);
+        ctx.restore();
+      }
+    }
+
+  }, [evalScores, gameMode, hoveredData]);
+
+  // --- Metrics Calculation ---
+  const avgScore = evalScores.length ? Math.round(evalScores.reduce((a, b) => a + b, 0) / evalScores.length) : 0;
+  const silverCount = evalScores.filter(s => s >= SCORE_SILVER).length;
+  const goldCount = evalScores.filter(s => s >= SCORE_GOLD).length;
+  const silverPct = evalScores.length ? ((silverCount / evalScores.length) * 100).toFixed(1) : "0.0";
+  const goldPct = evalScores.length ? ((goldCount / evalScores.length) * 100).toFixed(1) : "0.0";
+  const isSilver = gameState ? gameState.score >= SCORE_SILVER : false;
+  const isGold = gameState ? gameState.score >= SCORE_GOLD : false;
+
+  const getModeLabel = (m: string) => {
+    if (m === 'auto') return 'AI Assisted';
+    if (m === 'manual') return 'Solver';
+    if (m === 'eval') return 'Evaluation';
+    return m.charAt(0).toUpperCase() + m.slice(1);
+  };
+
+  const getModeDescription = () => {
+    if (gameMode === 'eval') return "Model Performance Analysis";
+    if (gameMode === 'auto') return "Cooperation Mode";
+    if (gameMode === 'manual') return "Manual Solver";
+    return "";
+  };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-emerald-500/30">
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-emerald-500/30 overflow-x-hidden">
 
-      <div className="max-w-6xl mx-auto p-4 md:p-8 grid md:grid-cols-[1fr_320px] gap-8 h-full">
+      {/* Background Decor */}
+      <div className="fixed inset-0 pointer-events-none z-0">
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-emerald-900/20 rounded-full blur-[120px]" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-indigo-900/20 rounded-full blur-[120px]" />
+      </div>
 
-        {/* Left: Board & Input */}
-        <div className="flex flex-col gap-6 justify-start">
-          <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-2 gap-4">
-            <div>
-              <h1 className="text-3xl font-bold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
-                Catch the King
-              </h1>
-              <p className="text-slate-500 text-sm mt-1">
-                {isManualMode ? "Manual Mode: Input value for the AI-selected card." : "Auto Mode: Click to reveal."}
-              </p>
-            </div>
+      <div className="relative z-10 max-w-7xl mx-auto p-4 md:p-8 h-full flex flex-col gap-6">
 
-            {/* Mode Switcher */}
-            <div className="flex items-center gap-2 bg-slate-900 p-1.5 rounded-lg border border-slate-800">
-              <button
-                onClick={() => startNewGame(false)}
-                className={cn("px-3 py-1.5 rounded text-sm font-medium transition-all", !isManualMode ? "bg-slate-700 text-white shadow" : "text-slate-500 hover:text-slate-300")}
-              >
-                Auto
-              </button>
-              <button
-                onClick={() => startNewGame(true)}
-                className={cn("px-3 py-1.5 rounded text-sm font-medium transition-all", isManualMode ? "bg-emerald-900 text-emerald-100 shadow" : "text-slate-500 hover:text-slate-300")}
-              >
-                Manual
-              </button>
-            </div>
-          </header>
-
-          {/* Grid Container */}
-          <div className="relative w-full max-w-[600px] mx-auto bg-slate-900/50 p-4 rounded-xl border border-slate-800 shadow-2xl">
-            <div className="grid grid-cols-5 gap-3 w-full">
-              {gameState.grid.map((row, rIndex) =>
-                row.map((cell, cIndex) => {
-                  const isTempRevealed = tempRevealed?.r === rIndex && tempRevealed?.c === cIndex;
-                  const isTrapHint = trapHintCells.some(([tr, tc]) => tr === rIndex && tc === cIndex);
-                  const isAiHint = aiHintCell?.r === rIndex && aiHintCell?.c === cIndex;
-                  const isSelected = selectedCell?.r === rIndex && selectedCell?.c === cIndex;
-
-                  // Visibility Logic
-                  const isVisible = cell.revealed || isTempRevealed || (gameState.game_over && cell.value !== null);
-
-                  // Value to Display
-                  let displayContent: React.ReactNode = null;
-
-                  if (isVisible) {
-                     const val = (cell.revealed || gameState.game_over) ? cell.value : tempRevealed?.val;
-                     displayContent = val === 6 ? <Crown size={32} fill="currentColor" /> : val;
-                  } else if (gameState.game_over && cell.value === null) {
-                     displayContent = <span className="text-slate-600 text-2xl font-bold">?</span>;
-                  }
-
-                  // Interactions: Valid move if NOT manual (manual is driven by AI state)
-                  const isValidMove = gameState.valid_moves.some(([r, c]) => r === rIndex && c === cIndex);
-                  // In Manual mode, you can't click. In Auto, you can click valid moves.
-                  const isDisabled = gameState.game_over || (isManualMode ? true : !isValidMove);
-
-                  return (
-                    <button
-                      key={`${rIndex}-${cIndex}`}
-                      onClick={() => handleTileClick(rIndex, cIndex)}
-                      disabled={isDisabled}
-                      className={cn(
-                        "relative w-full aspect-square flex items-center justify-center text-xl sm:text-3xl font-bold rounded-lg transition-all duration-200",
-                        "shadow-lg",
-                        getCardColor(isVisible ? (cell.value ?? tempRevealed?.val ?? null) : null),
-
-                        // Passive Reveal / Game Over ?
-                        (gameState.game_over && !cell.revealed) && "opacity-60 grayscale border-dashed border-2",
-
-                        // Hover Effects (Only active in Auto Mode)
-                        !isManualMode && !isVisible && isValidMove && !gameState.game_over && "hover:bg-slate-700 cursor-pointer hover:border-emerald-500/30",
-
-                        // Selection (Manual Mode target)
-                        isSelected && "ring-4 ring-emerald-400 z-20 scale-105 border-emerald-400 bg-slate-700",
-
-                        // AI Hint (Secondary highlight)
-                        isAiHint && !isVisible && !isSelected && "animate-pulse ring-4 ring-cyan-500/50 z-10 scale-105",
-
-                        // Disabled / Invalid
-                        isDisabled && !isVisible && !gameState.game_over && !isSelected && "opacity-40 cursor-not-allowed",
-
-                        // Completion
-                        (gameState.rows_completed[rIndex] || gameState.cols_completed[cIndex]) && isVisible && "brightness-125 ring-2 ring-yellow-500/20"
-                      )}
-                    >
-                      {displayContent !== null ? (
-                         <span className={cn("drop-shadow-md", displayContent === 6 ? "text-yellow-400 scale-110" : "")}>{displayContent}</span>
-                      ) : (
-                        <div className="w-full h-full opacity-10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-slate-500 to-transparent rounded-lg" />
-                      )}
-
-                      {/* Overlays */}
-                      {isTrapHint && !isVisible && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/60 rounded-lg animate-in fade-in duration-300 z-20">
-                          <Skull className="text-red-500 animate-bounce" size={28} />
-                        </div>
-                      )}
-                      {isSelected && (
-                         <div className="absolute -top-2 -right-2 bg-emerald-500 rounded-full p-1 text-black shadow-lg animate-in zoom-in duration-200">
-                           <Target size={12} />
-                         </div>
-                      )}
-                    </button>
-                  );
-                })
-              )}
-            </div>
+        {/* --- Header --- */}
+        <header className="flex flex-col md:flex-row justify-between items-end md:items-center gap-4 pb-4 border-b border-slate-800/60">
+          <div>
+            <h1 className="text-4xl font-extrabold tracking-tight bg-gradient-to-r from-emerald-400 via-cyan-400 to-indigo-400 bg-clip-text text-transparent drop-shadow-sm">
+              Catch the King
+            </h1>
+            <p className="text-slate-400 font-medium text-sm mt-1 flex items-center gap-2">
+              {gameMode === 'eval' ? <Activity size={16} className="text-indigo-400"/> : <Zap size={16} className="text-emerald-400"/>}
+              {getModeDescription()}
+            </p>
           </div>
 
-          {/* MANUAL INPUT PANEL (Below Board) */}
-          {gameState.is_manual && !gameState.game_over && (
-            <div className={cn(
-              "w-full max-w-[600px] mx-auto transition-all duration-500 overflow-hidden",
-              selectedCell ? "max-h-96 opacity-100 translate-y-0" : "max-h-0 opacity-0 -translate-y-4"
-            )}>
-              <div className="bg-slate-900 border-2 border-slate-700 p-5 rounded-xl shadow-2xl relative">
-                <div className="flex items-center justify-between mb-4">
-                   <h3 className="font-bold text-lg text-emerald-100 flex items-center gap-2">
-                     <Target size={20} className="text-emerald-500"/>
-                     Input Card at ({selectedCell?.r}, {selectedCell?.c})
-                   </h3>
-                   {/* Close button removed: User must input value for the selected field */}
-                </div>
-
-                <div className="flex flex-wrap gap-2 mb-4">
-                  {[1, 2, 3, 4, 5, 6].map(v => (
-                    <button
-                      key={v}
-                      onClick={() => setInputVal(v)}
-                      className={cn(
-                        "flex-1 min-w-[3rem] h-14 rounded-lg text-xl font-bold border-2 transition-all flex items-center justify-center",
-                        inputVal === v
-                          ? "bg-emerald-600 border-emerald-400 text-white shadow-[0_0_15px_rgba(16,185,129,0.4)] scale-105"
-                          : "bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700 hover:border-slate-500"
-                      )}
-                    >
-                      {v === 6 ? 'K' : v}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <div
-                    onClick={() => setInputHint(!inputHint)}
-                    className={cn(
-                      "flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-colors flex-1",
-                      inputHint ? "bg-cyan-950/50 border-cyan-500" : "bg-slate-800 border-slate-700 hover:border-slate-600"
-                    )}
-                  >
-                    <div className={cn("w-5 h-5 rounded border flex items-center justify-center", inputHint ? "bg-cyan-500 border-cyan-500" : "border-slate-500 bg-slate-900")}>
-                      {inputHint && <Check size={14} className="text-black stroke-[3]"/>}
-                    </div>
-                    <span className={cn("text-sm font-semibold", inputHint ? "text-cyan-300" : "text-slate-400")}>
-                      Hint Visible? <span className="text-xs font-normal opacity-70">(5 adjacent)</span>
-                    </span>
-                  </div>
-
-                  <button
-                    onClick={handleManualSubmit}
-                    disabled={inputVal === null || aiLoading}
-                    className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3 px-6 rounded-lg shadow-lg flex items-center justify-center gap-2"
-                  >
-                    {aiLoading ? (
-                       <>Processing...</>
-                    ) : (
-                       <>Confirm <Check size={18}/></>
-                    )}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-        </div>
-
-        {/* Right: Sidebar */}
-        <div className="flex flex-col gap-6">
-
-          {gameState.game_over && (
-            <div className="bg-slate-900 border-2 border-slate-700 p-6 rounded-2xl shadow-2xl animate-in slide-in-from-right-10 fade-in duration-500">
-               <div className="flex items-center gap-3 mb-4 border-b border-slate-800 pb-4">
-                 {isGold ? (
-                   <div className="p-3 bg-yellow-500/20 rounded-full text-yellow-400"><Trophy size={24} /></div>
-                 ) : isSilver ? (
-                   <div className="p-3 bg-slate-400/20 rounded-full text-slate-300"><Medal size={24} /></div>
-                 ) : (
-                   <div className="p-3 bg-red-500/20 rounded-full text-red-400"><Frown size={24} /></div>
-                 )}
-                 <div>
-                   <h2 className="text-xl font-bold text-white">
-                     {isGold ? "Gold Medal!" : isSilver ? "Silver Medal" : "Game Over"}
-                   </h2>
-                   <p className="text-slate-400 text-xs uppercase tracking-wider">Final Result</p>
-                 </div>
-               </div>
-               <div className="flex justify-between items-center mb-6">
-                 <span className="text-slate-400">Final Score</span>
-                 <span className={cn("text-3xl font-bold", isGold ? "text-yellow-400" : isSilver ? "text-slate-200" : "text-slate-500")}>
-                   {gameState.score}
-                 </span>
-               </div>
-               <button
-                  onClick={() => startNewGame(isManualMode)}
-                  className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-3 px-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-transform hover:scale-105 shadow-lg shadow-emerald-900/20"
-                >
-                  <RotateCcw size={20} /> Play Again
-                </button>
-            </div>
-          )}
-
-          {!gameState.game_over && (
-            <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl relative overflow-hidden">
-               <div className="absolute bottom-0 left-0 h-1 bg-slate-800 w-full">
-                 <div
-                   className="h-full bg-gradient-to-r from-emerald-600 to-yellow-500 transition-all duration-1000"
-                   style={{ width: `${Math.min(100, (gameState.score / 600) * 100)}%` }}
-                  />
-               </div>
-               <div className="flex justify-between items-end mb-2">
-                  <span className="text-slate-400 font-medium text-sm uppercase tracking-wider">Score</span>
-                  <span className="text-4xl font-bold text-white">{gameState.score}</span>
-               </div>
-               <div className="flex gap-2 text-xs font-semibold mt-4">
-                 <div className={cn("flex-1 py-2 px-3 rounded bg-slate-800 flex items-center justify-center gap-2", isSilver && "bg-slate-200 text-slate-900")}>
-                   <Trophy size={14} /> 400
-                 </div>
-                 <div className={cn("flex-1 py-2 px-3 rounded bg-slate-800 flex items-center justify-center gap-2", isGold && "bg-yellow-400 text-yellow-900")}>
-                   <Trophy size={14} /> 550
-                 </div>
-               </div>
-            </div>
-          )}
-
-          <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl">
-            <h3 className="text-slate-400 text-sm font-medium uppercase tracking-wider mb-4 flex items-center gap-2">
-              <Swords size={16} /> Hand
-            </h3>
-            <div className="flex items-center gap-4">
-              <div className="relative group">
-                {gameState.current_card ? (
-                  <div className={cn(
-                    "w-20 h-24 sm:w-20 sm:h-28 rounded-xl flex items-center justify-center text-3xl font-bold shadow-2xl border-t border-white/10 ring-4 ring-black/50 transition-transform",
-                    getCardColor(gameState.current_card),
-                    gameState.game_over && "opacity-50 grayscale"
-                  )}>
-                    {formatValue(gameState.current_card)}
-                  </div>
-                ) : (
-                   <div className="w-20 h-24 sm:h-28 rounded-xl border-2 border-dashed border-slate-700 flex items-center justify-center">
-                     <span className="text-slate-600 text-xs">Empty</span>
-                   </div>
+          <div className="bg-slate-900/50 backdrop-blur-md p-1.5 rounded-xl border border-slate-700/50 flex shadow-lg">
+            {(['auto', 'manual', 'eval'] as const).map(m => (
+              <button
+                key={m}
+                onClick={() => setGameMode(m)}
+                className={cn(
+                  "px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 cursor-pointer",
+                  gameMode === m
+                    ? "bg-slate-700 text-white shadow-inner"
+                    : "text-slate-400 hover:text-slate-200 hover:bg-slate-800"
                 )}
-                <div className="absolute -bottom-6 left-0 right-0 text-center text-xs text-slate-500">Current</div>
-              </div>
-              <div className="flex-1 flex items-center justify-center relative h-28">
-                {gameState.hand.slice(1).slice(0, 5).map((card, idx) => (
-                   <div
-                      key={idx}
-                      className="absolute w-16 h-24 rounded-lg border border-slate-700 shadow-md flex items-center justify-center text-xl font-bold text-slate-400 bg-slate-800"
-                      style={{
-                        left: `${idx * 15}px`,
-                        zIndex: 5 - idx,
-                        transform: `scale(${1 - idx * 0.05})`
-                      }}
-                   >
-                     {idx < 2 ? formatValue(card) : ''}
+              >
+                {m === 'eval' && <BarChart3 size={16} />}
+                {m === 'manual' && <Target size={16} />}
+                {m === 'auto' && <BrainCircuit size={16} />}
+                {getModeLabel(m)}
+              </button>
+            ))}
+          </div>
+        </header>
+
+        {/* --- MAIN CONTENT AREA --- */}
+        <div className="grid lg:grid-cols-[1fr_350px] gap-8">
+
+          {/* LEFT COLUMN */}
+          <div className="flex flex-col gap-6">
+
+            {gameMode === 'eval' ? (
+              // --- EVALUATION MODE UI ---
+              <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-8 duration-500">
+
+                {/* 1. Control Deck */}
+                <div className="bg-slate-900/60 backdrop-blur-xl border border-slate-700/50 p-6 rounded-2xl shadow-2xl flex flex-wrap items-center justify-between gap-6">
+                   <div className="flex items-center gap-4">
+                      <div className="flex flex-col">
+                        <label className="text-xs text-slate-400 uppercase font-bold tracking-wider mb-1">Simulations</label>
+                        <div className="flex items-center bg-slate-800 rounded-lg border border-slate-700 px-3">
+                           <input
+                             type="number"
+                             min="1" max="2000"
+                             value={evalTarget}
+                             onChange={(e) => setEvalTarget(Math.max(1, parseInt(e.target.value) || 0))}
+                             disabled={isEvalRunning}
+                             className="bg-transparent text-white font-mono py-2 w-20 focus:outline-none"
+                           />
+                           <span className="text-slate-500 text-sm">runs</span>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={isEvalRunning ? () => stopEvalRef.current = true : runEvaluation}
+                        className={cn(
+                          "flex items-center gap-2 px-8 py-3 rounded-xl font-bold text-white shadow-lg transition-all transform active:scale-95 cursor-pointer",
+                          isEvalRunning
+                            ? "bg-red-500/80 hover:bg-red-500 shadow-red-900/30"
+                            : "bg-indigo-600 hover:bg-indigo-500 shadow-indigo-900/30"
+                        )}
+                      >
+                         {isEvalRunning ? <Square size={20} fill="currentColor"/> : <Play size={20} fill="currentColor"/>}
+                         {isEvalRunning ? "Stop" : "Run Model"}
+                      </button>
                    </div>
-                ))}
+
+                   {/* Progress */}
+                   <div className="flex items-center gap-4">
+                     <div className="text-right">
+                       <div className="text-xs text-slate-400 uppercase font-bold">Games Played</div>
+                       <div className="text-2xl font-mono text-white">
+                         {evalScores.length} <span className="text-slate-500">/ {evalTarget}</span>
+                       </div>
+                     </div>
+                     <div className="w-12 h-12 rounded-full border-4 border-slate-700 flex items-center justify-center relative">
+                        <div
+                          className="absolute inset-0 rounded-full border-4 border-indigo-500 transition-all duration-300"
+                          style={{ clipPath: `inset(0 0 ${(1 - (evalScores.length/evalTarget)) * 100}% 0)` }}
+                        />
+                     </div>
+                   </div>
+                </div>
+
+                {/* 2. Metrics Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-slate-900/40 backdrop-blur border border-slate-700/50 p-5 rounded-xl flex items-center gap-4">
+                     <div className="p-3 bg-slate-800 rounded-lg text-slate-300"><Activity size={24}/></div>
+                     <div>
+                       <div className="text-slate-400 text-xs uppercase font-bold">Avg Score</div>
+                       <div className="text-3xl font-bold text-white tracking-tight">{avgScore}</div>
+                     </div>
+                  </div>
+                  <div className="bg-slate-900/40 backdrop-blur border border-slate-700/50 p-5 rounded-xl flex items-center gap-4 relative overflow-hidden group">
+                     <div className="absolute right-0 top-0 opacity-10 group-hover:opacity-20 transition-opacity"><Medal size={80}/></div>
+                     <div className="p-3 bg-slate-800 rounded-lg text-slate-200"><Medal size={24}/></div>
+                     <div>
+                       <div className="text-slate-400 text-xs uppercase font-bold">Silver Rate</div>
+                       <div className="text-3xl font-bold text-slate-200 tracking-tight">{silverPct}%</div>
+                     </div>
+                  </div>
+                  <div className="bg-slate-900/40 backdrop-blur border border-slate-700/50 p-5 rounded-xl flex items-center gap-4 relative overflow-hidden group">
+                     <div className="absolute right-0 top-0 opacity-10 group-hover:opacity-20 transition-opacity text-yellow-500"><Trophy size={80}/></div>
+                     <div className="p-3 bg-yellow-900/20 rounded-lg text-yellow-400"><Trophy size={24}/></div>
+                     <div>
+                       <div className="text-slate-400 text-xs uppercase font-bold">Gold Rate</div>
+                       <div className="text-3xl font-bold text-yellow-400 tracking-tight">{goldPct}%</div>
+                     </div>
+                  </div>
+                </div>
+
+                {/* 3. Dual Visualization Canvas */}
+                <div className="relative w-full aspect-[9/10] sm:aspect-[4/3] bg-transparent rounded-2xl overflow-hidden shadow-2xl">
+                  <canvas
+                    ref={canvasRef}
+                    onMouseMove={handleCanvasMouseMove}
+                    onMouseLeave={handleCanvasMouseLeave}
+                    className="w-full h-full object-contain cursor-crosshair"
+                    style={{ width: '100%', height: '100%' }}
+                  />
+                  {/* Tooltip */}
+                  {hoveredData && (
+                    <div
+                      className="absolute pointer-events-none bg-slate-800/95 backdrop-blur border border-slate-600 text-white text-xs p-2 rounded shadow-xl z-20 flex flex-col items-center min-w-[80px]"
+                      style={{
+                        left: hoveredData.x,
+                        top: hoveredData.y - 60,
+                        transform: 'translateX(-50%)'
+                      }}
+                    >
+                      <span className="text-slate-400 font-bold uppercase text-[10px]">Game {hoveredData.index + 1}</span>
+                      <span className={cn("text-lg font-bold", hoveredData.score >= SCORE_GOLD ? "text-yellow-400" : hoveredData.score >= SCORE_SILVER ? "text-slate-200" : "text-blue-300")}>
+                        {hoveredData.score}
+                      </span>
+                      <div className="absolute bottom-[-6px] left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-slate-600"></div>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
+            ) : (
+              // --- STANDARD GAME UI ---
+              <>
+                <div className="relative w-full max-w-[600px] mx-auto bg-slate-900/60 backdrop-blur-xl p-6 rounded-2xl border border-slate-700/50 shadow-[0_0_50px_rgba(0,0,0,0.5)]">
+                  {loading && !gameState ? (
+                     <div className="h-96 flex flex-col items-center justify-center text-slate-400 animate-pulse">
+                        <div className="w-16 h-16 border-4 border-slate-700 border-t-emerald-500 rounded-full animate-spin mb-4"></div>
+                        <p>Initializing...</p>
+                     </div>
+                  ) : gameState && (
+                    <div className="grid grid-cols-5 gap-3 w-full">
+                      {gameState.grid.map((row, rIndex) =>
+                        row.map((cell, cIndex) => {
+                          const isTempRevealed = tempRevealed?.r === rIndex && tempRevealed?.c === cIndex;
+                          const isTrapHint = trapHintCells.some(([tr, tc]) => tr === rIndex && tc === cIndex);
+                          const isAiHint = aiHintCell?.r === rIndex && aiHintCell?.c === cIndex;
+                          const isSelected = selectedCell?.r === rIndex && selectedCell?.c === cIndex;
+                          const isVisible = cell.revealed || isTempRevealed || (gameState.game_over && cell.value !== null);
+
+                          let displayContent: React.ReactNode = null;
+                          if (isVisible) {
+                            const val = (cell.revealed || gameState.game_over) ? cell.value : tempRevealed?.val;
+                            displayContent = val === 6 ? <Crown size={32} fill="currentColor" /> : val;
+                          } else if (gameState.game_over && cell.value === null) {
+                            displayContent = <span className="text-slate-700 text-2xl font-bold">?</span>;
+                          }
+
+                          const isValidMove = gameState.valid_moves.some(([r, c]) => r === rIndex && c === cIndex);
+                          const isDisabled = gameState.game_over || (gameMode === 'manual' ? true : !isValidMove);
+
+                          return (
+                            <button
+                              key={`${rIndex}-${cIndex}`}
+                              onClick={() => handleTileClick(rIndex, cIndex)}
+                              disabled={isDisabled}
+                              className={cn(
+                                "relative w-full aspect-square flex items-center justify-center text-xl sm:text-3xl font-bold rounded-xl transition-all duration-300 transform cursor-pointer",
+                                "shadow-lg border",
+                                getCardColor(isVisible ? (cell.value ?? tempRevealed?.val ?? null) : null),
+                                (gameState.game_over && !cell.revealed) && "opacity-40 grayscale border-dashed",
+                                gameMode !== 'manual' && !isVisible && isValidMove && !gameState.game_over && "hover:bg-slate-700 hover:scale-105 hover:border-emerald-500/50 hover:shadow-[0_0_15px_rgba(16,185,129,0.2)]",
+                                isSelected && "ring-2 ring-emerald-400 ring-offset-2 ring-offset-slate-900 z-20 scale-105 bg-slate-700 border-emerald-400",
+                                isAiHint && !isVisible && !isSelected && "animate-pulse ring-2 ring-cyan-400/80 ring-offset-2 ring-offset-slate-900 z-10 scale-105",
+                                isDisabled && !isVisible && !gameState.game_over && !isSelected && "opacity-30 cursor-not-allowed border-transparent",
+                                (gameState.rows_completed[rIndex] || gameState.cols_completed[cIndex]) && isVisible && "brightness-125 ring-2 ring-yellow-500/40"
+                              )}
+                            >
+                              {displayContent !== null ? (
+                                <span className={cn("drop-shadow-lg filter", displayContent === 6 ? "text-yellow-400 scale-110" : "")}>{displayContent}</span>
+                              ) : (
+                                <div className="w-full h-full opacity-20 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-slate-400 to-transparent rounded-lg" />
+                              )}
+                              {isTrapHint && !isVisible && (
+                                <div className="absolute inset-0 flex items-center justify-center bg-black/80 rounded-xl animate-in fade-in duration-300 z-20 backdrop-blur-sm border border-red-500/50">
+                                  <Skull className="text-red-500 animate-bounce drop-shadow-[0_0_10px_rgba(239,68,68,0.8)]" size={28} />
+                                </div>
+                              )}
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Manual Input Panel */}
+                {gameState && gameState.is_manual && !gameState.game_over && (
+                  <div className={cn(
+                    "w-full max-w-[600px] mx-auto transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] overflow-hidden",
+                    selectedCell ? "max-h-96 opacity-100 translate-y-0" : "max-h-0 opacity-0 -translate-y-8"
+                  )}>
+                    <div className="bg-slate-900/90 backdrop-blur-xl border border-emerald-500/30 p-6 rounded-2xl shadow-[0_0_30px_rgba(16,185,129,0.15)] relative">
+                      <h3 className="text-emerald-300 font-bold mb-4 flex items-center gap-2">
+                         <Target size={18}/> Select Value
+                      </h3>
+                      <div className="grid grid-cols-6 gap-2 mb-4">
+                        {[1, 2, 3, 4, 5, 6].map(v => (
+                          <button
+                            key={v}
+                            onClick={() => setInputVal(v)}
+                            className={cn(
+                              "aspect-square rounded-lg text-lg font-bold border-2 transition-all flex items-center justify-center cursor-pointer",
+                              inputVal === v
+                                ? "bg-emerald-600 border-emerald-400 text-white shadow-[0_0_15px_rgba(16,185,129,0.5)] scale-110"
+                                : "bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700 hover:border-slate-500"
+                            )}
+                          >
+                            {v === 6 ? 'K' : v}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="flex gap-3">
+                         <button
+                            onClick={() => setInputHint(!inputHint)}
+                            className={cn("flex-1 py-3 rounded-xl border font-bold text-sm transition-all flex items-center justify-center gap-2 cursor-pointer",
+                              inputHint ? "bg-cyan-900/40 border-cyan-500 text-cyan-300" : "bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700"
+                            )}
+                         >
+                            <div className={cn("w-4 h-4 rounded border flex items-center justify-center", inputHint ? "bg-cyan-500 border-cyan-500" : "border-slate-500")}>
+                               {inputHint && <Check size={10} className="text-black stroke-[4]"/>}
+                            </div>
+                            Hint
+                         </button>
+                         <button
+                            onClick={handleManualSubmit}
+                            disabled={inputVal === null || aiLoading}
+                            className="flex-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold py-3 px-6 rounded-xl shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
+                         >
+                            {aiLoading ? "Wait..." : "Confirm"}
+                         </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
 
-          {!gameState.game_over && (
-            <div className="grid gap-3">
-              {/* Manual Mode: AI Hint is automatic, so we hide the button. Auto Mode: Show it. */}
-              {!isManualMode && (
-                <button
-                  onClick={handleAskAI}
-                  disabled={aiLoading || autoMode}
-                  className="bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-600 text-white p-4 rounded-xl font-semibold shadow-lg shadow-indigo-900/20 flex items-center justify-center gap-3 transition-all hover:-translate-y-1 active:translate-y-0"
-                >
-                  {aiLoading ? (
-                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  ) : (
-                    <BrainCircuit size={20} />
-                  )}
-                  Ask AI Hint
-                </button>
-              )}
+          {/* RIGHT COLUMN: Sidebar Stats (Only visible in Game Modes) */}
+          {gameMode !== 'eval' && gameState && (
+            <div className="flex flex-col gap-6 animate-in slide-in-from-right-8 duration-500">
+              <div className="bg-slate-900/60 backdrop-blur-xl border border-slate-700/50 p-6 rounded-2xl shadow-xl relative overflow-hidden group">
+                 {gameState.game_over && (
+                   <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 text-center animate-in fade-in">
+                      {isGold ? <Trophy size={48} className="text-yellow-400 mb-2 animate-bounce"/> : isSilver ? <Medal size={48} className="text-slate-300 mb-2"/> : <Frown size={48} className="text-slate-500 mb-2"/>}
+                      <h2 className="text-2xl font-bold text-white mb-1">{isGold ? "Legendary!" : isSilver ? "Well Done" : "Game Over"}</h2>
+                      <p className="text-slate-400 text-sm mb-4">Final: {gameState.score}</p>
+                      <button onClick={() => startNewGame(gameMode === 'manual')} className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-2 rounded-full font-bold shadow-lg transition-transform hover:scale-105 cursor-pointer">Replay</button>
+                   </div>
+                 )}
+                 <div className="flex justify-between items-end mb-2 relative z-0">
+                    <span className="text-slate-400 text-xs uppercase font-bold tracking-wider">Score</span>
+                    <span className="text-5xl font-black text-white tracking-tighter">{gameState.score}</span>
+                 </div>
+                 <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden relative z-0">
+                   <div className="h-full bg-gradient-to-r from-emerald-500 via-cyan-500 to-yellow-500 transition-all duration-700" style={{ width: `${Math.min(100, (gameState.score / 600) * 100)}%` }} />
+                 </div>
+                 <div className="flex justify-between text-[10px] uppercase font-bold text-slate-500 mt-2 relative z-0">
+                    <span className={isSilver ? "text-emerald-400" : ""}>{SCORE_SILVER}</span>
+                    <span className={isGold ? "text-yellow-400" : ""}>{SCORE_GOLD}</span>
+                 </div>
+              </div>
 
-              {!isManualMode && (
-                <button
-                  onClick={() => setAutoMode(!autoMode)}
-                  className={cn(
-                    "p-4 rounded-xl font-semibold shadow-lg flex items-center justify-center gap-3 transition-all hover:-translate-y-1 active:translate-y-0",
-                    autoMode
-                      ? "bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-900/20"
-                      : "bg-cyan-600 hover:bg-cyan-500 text-white shadow-cyan-900/20"
-                  )}
-                >
-                  {autoMode ? (
-                    <>
-                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      Auto Mode Running...
-                    </>
-                  ) : (
-                    <>
-                      <BrainCircuit size={20} />
-                      Start Auto Mode
-                    </>
-                  )}
-                </button>
-              )}
+              <div className="bg-slate-900/60 backdrop-blur-xl border border-slate-700/50 p-6 rounded-2xl shadow-xl">
+                 <h3 className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-4 flex items-center gap-2"><Swords size={14}/> Hand</h3>
+                 <div className="flex items-center gap-4">
+                    <div className="relative">
+                       {gameState.current_card ? (
+                         <div className={cn("w-16 h-24 rounded-xl flex items-center justify-center text-2xl font-bold shadow-2xl border-t border-white/20 transition-transform transform hover:-translate-y-2", getCardColor(gameState.current_card))}>
+                           {formatValue(gameState.current_card)}
+                         </div>
+                       ) : (
+                         <div className="w-16 h-24 rounded-xl border-2 border-dashed border-slate-700 flex items-center justify-center text-slate-600 text-xs">Empty</div>
+                       )}
+                       <div className="text-center text-[10px] text-slate-500 mt-2 uppercase font-bold">Active</div>
+                    </div>
+                    <div className="flex-1 h-24 relative flex items-center pl-2">
+                       {gameState.hand.slice(1, 6).map((c, i) => (
+                         <div key={i} className="absolute w-14 h-20 rounded-lg bg-slate-800 border border-slate-600 shadow-md flex items-center justify-center text-lg font-bold text-slate-400 transition-all hover:translate-y-[-5px]" style={{ left: i * 25, zIndex: 10 - i }}>
+                           {i < 2 ? formatValue(c) : ''}
+                         </div>
+                       ))}
+                    </div>
+                 </div>
+              </div>
 
-              <button
-                onClick={() => startNewGame(isManualMode)}
-                className="bg-slate-800 hover:bg-slate-700 text-slate-300 p-4 rounded-xl font-semibold border border-slate-700 flex items-center justify-center gap-3 transition-colors"
-              >
-                <RotateCcw size={18} /> Restart
-              </button>
+              {!gameState.game_over && (
+                <div className="flex flex-col gap-3">
+                   {gameMode !== 'manual' && (
+                     <button
+                       onClick={handleAskAI}
+                       disabled={aiLoading || autoPlayActive}
+                       className="group bg-indigo-600/20 hover:bg-indigo-600/40 border border-indigo-500/50 text-indigo-200 p-4 rounded-xl font-bold transition-all flex items-center justify-center gap-3 disabled:opacity-50 cursor-pointer"
+                     >
+                        {aiLoading ? <div className="w-4 h-4 border-2 border-indigo-300 border-t-transparent rounded-full animate-spin"/> : <BrainCircuit size={18} className="group-hover:scale-110 transition-transform"/>}
+                        Ask AI
+                     </button>
+                   )}
+                   {gameMode !== 'manual' && (
+                     <button
+                       onClick={() => setAutoPlayActive(!autoPlayActive)}
+                       className={cn("p-4 rounded-xl font-bold transition-all flex items-center justify-center gap-3 shadow-lg border cursor-pointer",
+                         autoPlayActive
+                           ? "bg-emerald-900/50 border-emerald-500/50 text-emerald-300 animate-pulse"
+                           : "bg-cyan-600 hover:bg-cyan-500 border-transparent text-white"
+                       )}
+                     >
+                        <Zap size={18} className={cn(autoPlayActive && "animate-bounce")} />
+                        {autoPlayActive ? "Autopilot On" : "Start Autopilot"}
+                     </button>
+                   )}
+                   <button onClick={() => startNewGame(gameMode === 'manual')} className="bg-slate-800 hover:bg-slate-700 text-slate-300 p-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer">
+                      <RotateCcw size={16}/> Restart
+                   </button>
+                </div>
+              )}
             </div>
           )}
-
-          <div className="p-4 bg-slate-900/50 rounded-xl border border-slate-800 text-xs text-slate-400 space-y-2">
-            <div className="flex items-start gap-2">
-              <HelpCircle size={14} className="mt-0.5 shrink-0 text-slate-500" />
-              <p>Card &gt; Board ? Score & Keep.</p>
-            </div>
-            <div className="flex items-start gap-2">
-              <Skull size={14} className="mt-0.5 shrink-0 text-red-900" />
-              <p>Trap: 5 captures your 5.</p>
-            </div>
-            <div className="flex items-start gap-2">
-              <Crown size={14} className="mt-0.5 shrink-0 text-yellow-700" />
-              <p>King captures King (100pts).</p>
-            </div>
-          </div>
         </div>
       </div>
     </div>
