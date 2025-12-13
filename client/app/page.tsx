@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '@/utils/api';
 import { GameStateResponse } from '@/types';
 import {
@@ -47,6 +47,11 @@ export default function CatchTheKing() {
   const [trapHintCells, setTrapHintCells] = useState<number[][]>([]);
   const [aiHintCell, setAiHintCell] = useState<{r: number, c: number} | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
+  const [autoMode, setAutoMode] = useState(false);
+
+  // Timer refs for cleanup
+  const tempRevealedTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const trapHintTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     startNewGame();
@@ -54,6 +59,7 @@ export default function CatchTheKing() {
 
   const startNewGame = async () => {
     setLoading(true);
+    setAutoMode(false);
     try {
       const { session_id } = await api.createGame();
       setSessionId(session_id);
@@ -69,13 +75,23 @@ export default function CatchTheKing() {
     }
   };
 
-  const handleMove = async (row: number, col: number) => {
+  const handleMove = useCallback(async (row: number, col: number) => {
     if (!sessionId || !gameState || gameState.game_over) return;
 
     // Optimistic validity check
     const isValid = gameState.valid_moves.some(([r, c]) => r === row && c === col);
     if (!isValid) return;
 
+    // Clear previous timers and visual states
+    if (tempRevealedTimerRef.current) {
+      clearTimeout(tempRevealedTimerRef.current);
+      tempRevealedTimerRef.current = null;
+    }
+    if (trapHintTimerRef.current) {
+      clearTimeout(trapHintTimerRef.current);
+      trapHintTimerRef.current = null;
+    }
+    setTempRevealed(null);
     setTrapHintCells([]);
     setAiHintCell(null);
 
@@ -92,9 +108,10 @@ export default function CatchTheKing() {
         const val = newState.grid[row][col].value;
         if (val !== null) {
           setTempRevealed({ r: row, c: col, val });
-          setTimeout(() => {
+          tempRevealedTimerRef.current = setTimeout(() => {
             setTempRevealed(null);
-          }, 3000);
+            tempRevealedTimerRef.current = null;
+          }, 1500);
         }
       }
 
@@ -110,9 +127,10 @@ export default function CatchTheKing() {
           }
         }
         setTrapHintCells(neighbors);
-        setTimeout(() => {
+        trapHintTimerRef.current = setTimeout(() => {
           setTrapHintCells([]);
-        }, 3000);
+          trapHintTimerRef.current = null;
+        }, 1500);
       }
 
       if (res.game_over && res.score >= 400) {
@@ -124,7 +142,32 @@ export default function CatchTheKing() {
     } catch (e) {
       console.error("Move failed", e);
     }
-  };
+  }, [sessionId, gameState]);
+
+  // Auto mode: automatically play AI hints with 1s delay
+  useEffect(() => {
+    if (!autoMode || !sessionId || !gameState || gameState.game_over || aiLoading) {
+      return;
+    }
+
+    const timeoutId = setTimeout(async () => {
+      try {
+        const hint = await api.getHint(sessionId);
+        const [r, c] = hint.recommended_move;
+        setAiHintCell({ r, c });
+
+        // Small delay to show the hint before making the move
+        setTimeout(() => {
+          handleMove(r, c);
+        }, 200);
+      } catch (e) {
+        console.error("Auto mode: AI hint failed", e);
+        setAutoMode(false);
+      }
+    }, 1000);
+
+    return () => clearTimeout(timeoutId);
+  }, [autoMode, sessionId, gameState, aiLoading, handleMove]);
 
   const handleAskAI = async () => {
     if (!sessionId || !gameState || gameState.game_over || aiLoading) return;
@@ -349,7 +392,7 @@ export default function CatchTheKing() {
             <div className="grid gap-3">
               <button
                 onClick={handleAskAI}
-                disabled={aiLoading}
+                disabled={aiLoading || autoMode}
                 className="bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-600 text-white p-4 rounded-xl font-semibold shadow-lg shadow-indigo-900/20 flex items-center justify-center gap-3 transition-all hover:-translate-y-1 active:translate-y-0"
               >
                 {aiLoading ? (
@@ -358,6 +401,28 @@ export default function CatchTheKing() {
                   <BrainCircuit size={20} />
                 )}
                 Ask AI Hint
+              </button>
+
+              <button
+                onClick={() => setAutoMode(!autoMode)}
+                className={cn(
+                  "p-4 rounded-xl font-semibold shadow-lg flex items-center justify-center gap-3 transition-all hover:-translate-y-1 active:translate-y-0",
+                  autoMode
+                    ? "bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-900/20"
+                    : "bg-cyan-600 hover:bg-cyan-500 text-white shadow-cyan-900/20"
+                )}
+              >
+                {autoMode ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Auto Mode Running...
+                  </>
+                ) : (
+                  <>
+                    <BrainCircuit size={20} />
+                    Start Auto Mode
+                  </>
+                )}
               </button>
 
               <button
