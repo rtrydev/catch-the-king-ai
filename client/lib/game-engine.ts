@@ -336,6 +336,7 @@ export class CatchTheKingEngine {
     }
 
     if (captured) {
+      this.gridKnown[row][col] = true; // FIX APPLIED HERE
       this.hand.shift();
       info.hand_popped = true;
       info.re_hidden = true;
@@ -426,6 +427,7 @@ export class CatchTheKingEngine {
     }
 
     if (captured) {
+      this.gridKnown[row][col] = true; // FIX APPLIED HERE
       this.hand.shift();
       info.hand_popped = true;
       info.re_hidden = true;

@@ -279,6 +279,7 @@ class GameState:
                 captured = True
 
         if captured:
+            self.grid_known[r][c] = True # FIX APPLIED: Mark cell as known so observation sees it
             self.hand.pop(0)
             info['hand_popped'] = True
             info['re_hidden'] = True
@@ -375,6 +376,7 @@ class GameState:
                     break
 
         if captured:
+            self.grid_known[r][c] = True # FIX APPLIED: Mark cell as known so observation sees it
             self.hand.pop(0)
             info['hand_popped'] = True
             info['re_hidden'] = True
