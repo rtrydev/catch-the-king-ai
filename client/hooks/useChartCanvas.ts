@@ -8,6 +8,8 @@ interface HoverData {
   y: number;
 }
 
+const MAX_VISIBLE_GAMES = 200;
+
 export function useChartCanvas(scores: number[], isActiveMode: boolean) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [hoveredData, setHoveredData] = useState<HoverData | null>(null);
@@ -33,14 +35,19 @@ export function useChartCanvas(scores: number[], isActiveMode: boolean) {
     }
 
     const graphW = canvas.width - padding * 2;
-    const barWidth = graphW / scores.length;
+
+    // SLICE: Create the same subset of data used in the drawing logic
+    const visibleScores = scores.slice(-MAX_VISIBLE_GAMES);
+    const barWidth = graphW / visibleScores.length;
 
     if (mouseX >= padding && mouseX <= canvas.width - padding) {
       const index = Math.floor((mouseX - padding) / barWidth);
-      if (index >= 0 && index < scores.length) {
+
+      // Check index against the visible subset length
+      if (index >= 0 && index < visibleScores.length) {
         setHoveredData({
-          index,
-          score: scores[index],
+          index, // This is the relative index within the visible slice
+          score: visibleScores[index],
           x: mouseX / scaleX,
           y: mouseY / scaleY,
         });
@@ -85,6 +92,9 @@ export function useChartCanvas(scores: number[], isActiveMode: boolean) {
     }
 
     // --- 1. TOP CHART: Game Timeline ---
+    // SLICE: Only take the last N games
+    const visibleScores = scores.slice(-MAX_VISIBLE_GAMES);
+
     const topH = h / 2 - p * 1.5;
     const topY = p;
 
@@ -98,17 +108,19 @@ export function useChartCanvas(scores: number[], isActiveMode: boolean) {
     ctx.fillStyle = '#e2e8f0';
     ctx.font = `bold ${12 * dpr}px sans-serif`;
     ctx.textAlign = 'left';
-    ctx.fillText(`GAME TIMELINE (LAST ${scores.length})`, p, p * 1.5);
+    ctx.fillText(`GAME TIMELINE (LAST ${visibleScores.length})`, p, p * 1.5);
 
     const tGraphX = p;
     const tGraphY = p * 2.5;
     const tGraphW = w - p * 2;
     const tGraphH = topH - p * 1.5;
-    const maxValTimeline = Math.max(650, ...scores);
-    const barW = tGraphW / scores.length;
 
-    // Draw Bars
-    scores.forEach((score, i) => {
+    // Calculate max based on visible scores so the chart scales dynamically to recent performance
+    const maxValTimeline = Math.max(650, ...visibleScores);
+    const barW = tGraphW / visibleScores.length;
+
+    // Draw Bars (Iterate over visibleScores)
+    visibleScores.forEach((score, i) => {
       const bh = (score / maxValTimeline) * tGraphH;
       const bx = tGraphX + i * barW;
       const by = tGraphY + tGraphH - bh;
@@ -117,6 +129,7 @@ export function useChartCanvas(scores: number[], isActiveMode: boolean) {
       else if (score >= SCORE_SILVER) ctx.fillStyle = cBarSilver;
       else ctx.fillStyle = cBarBlue;
 
+      // Highlight logic uses the relative index 'i'
       if (hoveredData?.index === i) {
         ctx.fillStyle = '#ffffff';
       }
@@ -147,6 +160,7 @@ export function useChartCanvas(scores: number[], isActiveMode: boolean) {
     ctx.setLineDash([]);
 
     // --- 2. BOTTOM CHART: Score Distribution ---
+    // (We keep using the full 'scores' array here for accurate aggregate stats)
     const botY = topH + p * 2.5;
     const botH = h - botY - p;
 
