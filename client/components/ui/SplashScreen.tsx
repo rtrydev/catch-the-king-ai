@@ -9,7 +9,7 @@ export default function SplashScreen({ finishLoading = false }: SplashScreenProp
     <div
       className={`
         fixed inset-0 z-50 flex flex-col items-center justify-center
-        bg-gradient-to-br from-slate-900 to-black
+        bg-slate-950 md:bg-gradient-to-br md:from-slate-900 md:to-black
         transition-opacity duration-700 ease-out
         ${finishLoading ? 'opacity-0 pointer-events-none' : 'opacity-100'}
       `}

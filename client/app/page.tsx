@@ -52,9 +52,8 @@ export default function CatchTheKing() {
   }, [gameMode, startNewGame]);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-emerald-500/30 overflow-x-hidden">
-      {/* Background Decor */}
-      <div className="fixed inset-0 pointer-events-none z-0">
+    <div className="h-dvh bg-slate-950 text-slate-100 font-sans selection:bg-emerald-500/30 overflow-x-hidden">
+      <div className="fixed inset-0 pointer-events-none z-0 hidden md:block">
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-emerald-900/20 rounded-full blur-[120px]" />
         <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-indigo-900/20 rounded-full blur-[120px]" />
       </div>
