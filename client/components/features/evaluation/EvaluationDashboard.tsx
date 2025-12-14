@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, Play, Square, TrendingDown, TrendingUp, Medal, Trophy } from 'lucide-react';
+import { Activity, Play, TrendingDown, TrendingUp, Medal, Trophy, Square } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SCORE_GOLD, SCORE_SILVER } from '@/lib/constants';
 import { EvaluationChart } from './EvaluationChart';
@@ -26,32 +26,31 @@ export const EvaluationDashboard: React.FC<Props> = ({ scores, target, setTarget
     <div key="eval-ui" className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-8 duration-500">
       {/* 1. Control Deck */}
       <div className="bg-slate-900/60 backdrop-blur-xl border border-slate-700/50 p-4 sm:p-6 rounded-2xl shadow-2xl flex flex-col sm:flex-row flex-wrap items-center justify-center sm:justify-between gap-4 sm:gap-6">
-        <div className="flex items-center gap-4">
-          <div className="flex flex-col">
-            <label className="text-xs text-slate-400 uppercase font-bold tracking-wider mb-1">Simulations</label>
-            <div className="flex items-center bg-slate-800 rounded-lg border border-slate-700 px-3">
-              <input
-                type="number"
-                min="1"
-                max="2000"
-                value={target}
-                onChange={(e) => setTarget(Math.max(1, parseInt(e.target.value) || 0))}
-                disabled={isRunning}
-                className="bg-transparent text-white font-mono py-2 w-20 focus:outline-none"
-              />
-              <span className="text-slate-500 text-sm">runs</span>
-            </div>
+        <div className="flex items-center gap-4 p-2">
+          <div className="flex flex-col px-2">
+            <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Simulations</label>
+            <input
+              type="number"
+              min="1"
+              max="2000"
+              value={target}
+              onChange={(e) => setTarget(Math.max(1, parseInt(e.target.value) || 0))}
+              disabled={isRunning}
+              className="bg-transparent text-white font-bold outline-none w-20 border-b border-slate-700 focus:border-emerald-500 transition-colors"
+            />
           </div>
 
           <button
             onClick={isRunning ? onStop : onRun}
             className={cn(
-              'flex items-center gap-2 px-8 py-3 rounded-xl font-bold text-white shadow-lg transition-all transform active:scale-95 cursor-pointer',
-              isRunning ? 'bg-red-500/80 hover:bg-red-500 shadow-red-900/30' : 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-900/30'
+              'px-6 py-3 rounded-lg font-bold flex items-center gap-2 transition-all shadow-lg cursor-pointer',
+              isRunning
+                ? 'bg-red-500/10 text-red-500 hover:bg-red-500/20 border border-red-500/30'
+                : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-900/20'
             )}
           >
-            {isRunning ? <Square size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" />}
-            {isRunning ? 'Stop' : 'Run Model'}
+            {isRunning ? <Square className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+            {isRunning ? 'Stop' : 'Start'}
           </button>
         </div>
 
