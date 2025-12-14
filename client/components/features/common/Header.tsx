@@ -18,7 +18,7 @@ export const Header: React.FC<HeaderProps> = ({ gameMode, setGameMode }) => {
 
   const getModeDescription = () => {
     if (gameMode === 'eval') return 'Model Performance Analysis';
-    if (gameMode === 'auto') return 'Assisted Mode'; // Changed from 'Cooperation Mode'
+    if (gameMode === 'auto') return 'Assisted Mode';
     if (gameMode === 'manual') return 'Manual Solver';
     return '';
   };
@@ -26,7 +26,6 @@ export const Header: React.FC<HeaderProps> = ({ gameMode, setGameMode }) => {
   return (
     <header className="flex flex-col md:flex-row justify-between items-center gap-4 pb-4 border-b border-slate-800/60">
       <div className="text-center md:text-left">
-        {/* Updated Title Section: "Catch the" (White) + "King" (Gold) */}
         <h1 className="relative text-4xl md:text-5xl font-black uppercase tracking-wide flex items-center justify-center md:justify-start gap-3">
           <span className="text-slate-100 drop-shadow-lg">
             Catch the
@@ -58,10 +57,11 @@ export const Header: React.FC<HeaderProps> = ({ gameMode, setGameMode }) => {
             key={m}
             onClick={() => setGameMode(m)}
             className={cn(
-              'px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-1.5 sm:gap-2 cursor-pointer',
+              // Added 'border' here to ensure 1px width is reserved for all states
+              'px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-1.5 sm:gap-2 cursor-pointer border',
               gameMode === m
-                ? 'bg-slate-700 text-white shadow-inner border border-slate-600'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                ? 'bg-slate-700 text-white shadow-inner border-slate-600'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800 border-transparent' // Added border-transparent
             )}
           >
             {m === 'eval' && <BarChart3 size={16} />}
