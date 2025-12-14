@@ -490,14 +490,6 @@ def train():
             elapsed = time.time() - start_time
             eps_per_sec = i_episode / elapsed if elapsed > 0 else 0
 
-            # Track best performance
-            if avg_score > best_avg_score:
-                best_avg_score = avg_score
-                torch.save(policy_net.state_dict(), "rl_agent_best_avg.pth")
-            if gold_pct > best_gold_pct:
-                best_gold_pct = gold_pct
-                torch.save(policy_net.state_dict(), "rl_agent_best_gold.pth")
-
             print(f"Ep {i_episode:5d} | "
                   f"Avg: {avg_score:5.1f} ± {std_score:4.1f} | "
                   f"Min/Max: {min_score:3d}/{max_score:3d} | "
@@ -511,13 +503,23 @@ def train():
 
         # Periodic evaluation (more thorough)
         if i_episode % 5000 == 0 and i_episode > 0:
-            print("\n--- Running evaluation (100 games) ---")
-            eval_scores = evaluate_agent(policy_net, num_games=100)
+            eval_game_count = 5000
+            print(f"\n--- Running evaluation ({eval_game_count} games) ---")
+            eval_scores = evaluate_agent(policy_net, num_games=eval_game_count)
             eval_avg = np.mean(eval_scores)
-            eval_silver = sum(1 for s in eval_scores if s >= SCORE_SILVER) / 100 * 100
-            eval_gold = sum(1 for s in eval_scores if s >= SCORE_GOLD) / 100 * 100
+            eval_silver = sum(1 for s in eval_scores if s >= SCORE_SILVER) / eval_game_count * 100
+            eval_gold = sum(1 for s in eval_scores if s >= SCORE_GOLD) / eval_game_count * 100
             print(f"Eval Avg: {eval_avg:.1f} | Silver: {eval_silver:.0f}% | Gold: {eval_gold:.0f}%")
             print("-" * 60 + "\n")
+
+            # Track best performance
+            if eval_avg > best_avg_score:
+                best_avg_score = eval_avg
+                torch.save(policy_net.state_dict(), "rl_agent_best_avg.pth")
+            if eval_gold > best_gold_pct:
+                best_gold_pct = eval_gold
+                torch.save(policy_net.state_dict(), "rl_agent_best_gold.pth")
+
             policy_net.train()
 
     # Final save
