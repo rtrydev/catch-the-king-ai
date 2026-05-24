@@ -436,13 +436,6 @@ class GameState:
         if self.game_over: return mask
 
         current_card = self.hand[0] if self.hand else 0
-        unknown_exist = False
-
-        for i in range(25):
-            r, c = divmod(i, 5)
-            if not self.grid_known[r][c] and not self.grid_revealed[r][c]:
-                unknown_exist = True
-                break
 
         for r in range(5):
             for c in range(5):
@@ -456,8 +449,10 @@ class GameState:
                     if current_card == CARD_K:
                         mask[i] = (board_val == CARD_K)
                     elif board_val > current_card:
-                         if unknown_exist: mask[i] = False
-                         else: mask[i] = True
+                        # Suicide on a known higher card: never a useful choice
+                        # as long as ANY other legal cell exists. The final
+                        # fallback below covers the all-suicide edge case.
+                        mask[i] = False
                     else:
                         mask[i] = True
                 else:
@@ -467,6 +462,29 @@ class GameState:
             for i in range(25):
                 if not self.grid_revealed.flatten()[i]: mask[i] = True
         return mask
+
+    def get_capture_penalty_mask(self):
+        """
+        Inference-time safety: cells where clicking with the *current* hand card
+        is a guaranteed capture-by-[5]. Only fires when the active card is [5]
+        and the candidate cell has a face-down KNOWN [5] neighbor (engine knows
+        the value, cell isn't revealed). Used to subtract a large constant from
+        the model's Q-values before argmax, so the agent never blunders into a
+        capture trap when a non-capture alternative is legal.
+        """
+        penalty = np.zeros(25, dtype=bool)
+        if not self.hand or self.hand[0] != CARD_5 or self.game_over:
+            return penalty
+        for r in range(5):
+            for c in range(5):
+                if self.grid_revealed[r][c]:
+                    continue
+                for nr, nc in self._get_neighbors(r, c):
+                    if (self.grid_known[nr][nc] and not self.grid_revealed[nr][nc]
+                            and self.grid_values[nr][nc] == CARD_5):
+                        penalty[r * 5 + c] = True
+                        break
+        return penalty
 
     # Step function for training remains mostly same,
     # but we assume training only happens in auto mode so we don't need to touch it much.

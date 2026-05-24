@@ -544,17 +544,6 @@ export class CatchTheKingEngine {
     if (this.gameOver) return mask;
 
     const currentCard = this.hand.length ? this.hand[0] : 0;
-    let unknownExist = false;
-
-    // Check if any unknown cards exist
-    for (let i = 0; i < 25; i++) {
-        const r = Math.floor(i / 5);
-        const c = i % 5;
-        if (!this.gridKnown[r][c] && !this.gridRevealed[r][c]) {
-            unknownExist = true;
-            break;
-        }
-    }
 
     for (let r = 0; r < 5; r++) {
       for (let c = 0; c < 5; c++) {
@@ -569,9 +558,10 @@ export class CatchTheKingEngine {
           if (currentCard === CARD_K) {
             mask[i] = (boardVal === CARD_K);
           } else if (boardVal > currentCard) {
-            // If unknown exist, we shouldn't suicide on known larger cards
-            if (unknownExist) mask[i] = false;
-            else mask[i] = true;
+            // Suicide on a known higher card is never a useful choice when
+            // any other legal cell exists. The fallback below handles the
+            // (impossible-in-practice) all-suicide edge case.
+            mask[i] = false;
           } else {
             mask[i] = true;
           }
@@ -591,6 +581,28 @@ export class CatchTheKingEngine {
     }
 
     return mask;
+  }
+
+  /**
+   * Inference-time safety: cells where clicking with the current hand card is
+   * a guaranteed capture-by-[5]. Only fires when the active card is [5] and
+   * the candidate cell has a face-down KNOWN [5] neighbor.
+   */
+  public getCapturePenaltyMask(): boolean[] {
+    const penalty = Array(25).fill(false);
+    if (this.gameOver || !this.hand.length || this.hand[0] !== 5) return penalty;
+    for (let r = 0; r < 5; r++) {
+      for (let c = 0; c < 5; c++) {
+        if (this.gridRevealed[r][c]) continue;
+        for (const [nr, nc] of this.getNeighbors(r, c)) {
+          if (this.gridKnown[nr][nc] && !this.gridRevealed[nr][nc] && this.gridValues[nr][nc] === 5) {
+            penalty[r * 5 + c] = true;
+            break;
+          }
+        }
+      }
+    }
+    return penalty;
   }
 
   public getGameStateResponse(): GameStateResponse {

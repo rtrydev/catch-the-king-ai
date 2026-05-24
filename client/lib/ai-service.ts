@@ -48,7 +48,19 @@ export async function getHint(game: CatchTheKingEngine): Promise<HintResponse> {
 
   const results = await session.run(feeds);
   const outputName = session.outputNames[0];
-  const outputData = results[outputName].data as Float32Array; // Size 25
+  const rawOutput = results[outputName].data as Float32Array; // Size 25
+  // Copy to a mutable array we can adjust with the safety penalty.
+  const outputData = Array.from(rawOutput);
+
+  // Safety layer: when P=[5] is active and any cell would be a guaranteed
+  // capture (face-down known-[5] neighbor), push those Q-values down so the
+  // model can never pick a known capture trap when a safe alternative is
+  // legal. Uniform penalty preserves the model's ordering inside the
+  // all-capture edge case.
+  const capturePenalty = game.getCapturePenaltyMask();
+  for (let i = 0; i < 25; i++) {
+    if (capturePenalty[i]) outputData[i] -= 1000;
+  }
 
   // 4. Mask Invalid Moves
   const validMask = game.getValidMovesMask();

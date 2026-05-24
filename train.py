@@ -254,21 +254,34 @@ def get_beta(episode, total_episodes):
 # TRAINING ACTION SELECTION
 # =============================================================================
 
-def get_training_action(policy_net, state, valid_mask, steps_done):
-    """Select action using epsilon-greedy with staged decay."""
+def get_training_action(policy_net, state, valid_mask, steps_done, capture_penalty_mask=None):
+    """Select action using epsilon-greedy with staged decay.
+
+    Optional capture_penalty_mask: cells where clicking would be a guaranteed
+    capture-by-[5]. Treated like an unsafe-but-legal action — the random branch
+    avoids them when possible (to surface other transitions during exploration)
+    and the greedy branch subtracts a large constant so they're never selected
+    unless they're the only legal moves.
+    """
     eps_threshold = get_epsilon(steps_done)
 
     if random.random() < eps_threshold:
-        # Random action
+        # Random action — prefer non-capture cells, fall back to all legal cells.
         valid_indices = np.where(valid_mask)[0]
         if len(valid_indices) == 0:
             return 0
+        if capture_penalty_mask is not None:
+            safe = [i for i in valid_indices if not capture_penalty_mask[i]]
+            if safe:
+                valid_indices = np.array(safe)
         return random.choice(valid_indices)
     else:
         # Greedy action
         with torch.no_grad():
             state_t = torch.FloatTensor(state).unsqueeze(0).to(device)
             q_values = policy_net(state_t).cpu().numpy()[0]
+            if capture_penalty_mask is not None:
+                q_values[capture_penalty_mask] -= 1000.0
             q_values[~valid_mask] = -float('inf')
             return np.argmax(q_values)
 
@@ -355,9 +368,11 @@ def evaluate_agent(policy_net, num_games=100):
                 break
 
             state = env.get_observation_vector()
+            capture_penalty = env.get_capture_penalty_mask()
             with torch.no_grad():
                 state_t = torch.FloatTensor(state).unsqueeze(0).to(device)
                 q_values = policy_net(state_t).cpu().numpy()[0]
+                q_values[capture_penalty] -= 1000.0
                 q_values[~mask] = -float('inf')
                 action = np.argmax(q_values)
 
@@ -436,7 +451,8 @@ def train():
                 break
 
             # Select action
-            action = get_training_action(policy_net, state, valid_mask, steps_done)
+            capture_penalty_mask = env.get_capture_penalty_mask()
+            action = get_training_action(policy_net, state, valid_mask, steps_done, capture_penalty_mask)
             steps_done += 1
 
             # Execute action
@@ -569,10 +585,12 @@ def play_validation_game(policy_net):
             break
 
         state = env.get_observation_vector()
+        capture_penalty = env.get_capture_penalty_mask()
         with torch.no_grad():
             state_t = torch.FloatTensor(state).unsqueeze(0).to(device)
             q_values = policy_net(state_t).cpu().numpy()[0]
             q_values_display = q_values.copy()
+            q_values[capture_penalty] -= 1000.0
             q_values[~mask] = -float('inf')
             action = np.argmax(q_values)
 

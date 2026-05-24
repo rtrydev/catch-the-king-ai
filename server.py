@@ -215,6 +215,14 @@ async def get_hint(session_id: str):
         state_t = torch.FloatTensor(state).unsqueeze(0).to(device)
         q_values = model(state_t).cpu().numpy()[0]
 
+    # Safety layer: when P=[5] is active and any cell would be a guaranteed
+    # capture (face-down known-[5] neighbor), push those Q-values down so the
+    # model can never pick a known capture trap when a safe alternative is
+    # legal. Uniform penalty preserves the model's ordering inside the
+    # all-capture edge case.
+    capture_penalty = game.get_capture_penalty_mask()
+    q_values[capture_penalty] -= 1000.0
+
     moves_ranked = []
     for i in range(25):
         if valid_mask[i]:
